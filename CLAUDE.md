@@ -1,9 +1,15 @@
-# Spindle: Project Notes
+# LocalBeat: Project Notes
 
 A personal Android music player for the user's own CD rips: simple and
 lightweight like Musicolet (the player it replaces), but built around this
 library's folder layout and tags. For personal use (sideloaded), not the Play
 Store.
+
+**Principle: local music only, no accounts, no data collection.** The app
+should not request the INTERNET permission at all, so that's verifiable in
+Android's app info (cover art and tags all come from the files). Anything that
+would need the network (lyrics, scrobbling) is out of scope unless the user
+decides otherwise.
 
 ## Why
 
@@ -11,7 +17,7 @@ Store.
   text. "Sittin’ on Top of the World" (Let Love Rule) shows as `Sittinâ€™`,
   while other titles with the same ’ display fine. Proven 2026-11-06 with test
   files: any layout with that exact title garbles, any other title text
-  doesn't. Vorbis comments are UTF-8 by spec; Spindle must read them as UTF-8
+  doesn't. Vorbis comments are UTF-8 by spec; LocalBeat must read them as UTF-8
   and never guess
 - Musicolet has no tag-encoding setting and no manual rescan (it finds new
   files on its own)
@@ -25,7 +31,7 @@ Store.
 ## The library (contract with CDRipPipeline)
 
 Files are put on the phone by `~/development/CDRipPipeline/phone-sync.py`
-(copies of `~/Music/phone`, made by `flac2phone.sh`). Spindle should rely on:
+(copies of `~/Music/phone`, made by `flac2phone.sh`). LocalBeat should rely on:
 
 - Layout: `Music/Artist/Album/NN. Artist - Title.opus`; multi-disc albums
   share one folder with a disc prefix: `1.07. Artist - Title.opus`
