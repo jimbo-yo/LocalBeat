@@ -13,3 +13,4 @@ captures/
 *.keystore
 *.jks
 *.swp
+dist/

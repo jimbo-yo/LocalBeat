@@ -1,0 +1,40 @@
+package com.jimboyo.localbeat
+
+import android.app.Application
+import com.jimboyo.localbeat.art.ArtStore
+import com.jimboyo.localbeat.library.LibraryRepository
+import com.jimboyo.localbeat.playback.QueueStore
+import com.jimboyo.localbeat.playlists.PlaylistStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
+
+/** App-wide singletons, shared by the UI, the playback service and the artwork provider. */
+class LocalBeatApp : Application() {
+    lateinit var library: LibraryRepository
+        private set
+    lateinit var art: ArtStore
+        private set
+    lateinit var queueStore: QueueStore
+        private set
+    lateinit var playlists: PlaylistStore
+        private set
+    lateinit var settings: Settings
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        library = LibraryRepository(this)
+        art = ArtStore(this)
+        queueStore = QueueStore(this)
+        playlists = PlaylistStore(this)
+        settings = Settings(this)
+
+        // After each scan, drop covers of albums that changed or are gone.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            library.generation.drop(1).collect { library.library.value?.let { art.prune(it.albums) } }
+        }
+    }
+}

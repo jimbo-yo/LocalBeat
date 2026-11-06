@@ -19,6 +19,10 @@ decides otherwise.
   files: any layout with that exact title garbles, any other title text
   doesn't. Vorbis comments are UTF-8 by spec; LocalBeat must read them as UTF-8
   and never guess
+- Root cause found 2026-11-06: it's **Android's own MediaStore scanner** that
+  garbles it (`content query` shows `title=Sittinâ€™...`); Musicolet just shows
+  MediaStore's columns. So LocalBeat uses MediaStore only to *find* files and
+  reads every tag itself (`tags/OggTags.kt`)
 - Musicolet has no tag-encoding setting and no manual rescan (it finds new
   files on its own)
 
@@ -49,6 +53,16 @@ Files are put on the phone by `~/development/CDRipPipeline/phone-sync.py`
 - No ReplayGain tags on the phone copies (stripped: opusenc turned them into a
   bogus +99.6 dB header gain). The Opus header output gain is 0 dB
 
+- Files copied with `adb push` stay `is_pending=1` in MediaStore (owner
+  `com.android.shell`) and are **invisible to other apps** until a media scan
+  touches them. Scanning a folder clears it:
+  `adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///sdcard/Music/<folder>"`.
+  LocalBeat re-indexes Music/ on every start; phone-sync should also do it
+- Older fre:ac rips (the `Artist - Album/` folders) have no cover art at all,
+  embedded or `cover.jpg`. Re-rips fix it
+- Rippers disagree on apostrophes (`Guns N' Roses` vs `Guns N’ Roses`):
+  grouping folds case, curly/straight quotes and spaces (`library/Library.kt`)
+
 ## Android Auto
 
 - A media app needs no special permission: expose a Media3
@@ -66,8 +80,57 @@ Files are put on the phone by `~/development/CDRipPipeline/phone-sync.py`
 - SDK `~/Android/Sdk`: platforms 35, 36, 37.0; build-tools 34-36
 - Build and install from the CLI with Gradle, then `adb install`
 
-## Plan
+## Build
 
-- Kotlin + Media3 (ExoPlayer: native Opus, queue, gapless, audio focus)
-- First: list what the user likes about Musicolet and what bugs them; that
-  drives the UI
+```sh
+export JAVA_HOME=/opt/android-studio/jbr
+./gradlew :app:testDebugUnitTest      # tag reader, incl. every file in ~/Music/phone
+./gradlew dist                         # release APK -> dist/LocalBeat-<version>.apk
+adb install -r dist/LocalBeat-<version>.apk
+aapt2 dump permissions <apk>          # must never list INTERNET
+```
+
+Release builds are signed with the LocalBeat key in `~/.config/localbeat/`
+(`keystore.properties` + `localbeat-release.jks`, created 2026-11-06, not in
+git). **Back it up**: installs on any phone can only be updated with the same
+key. Without it the build falls back to the debug key. Bump `versionCode` for
+every APK handed out. minSdk 33: other phones need Android 13+.
+
+AGP 9.5 / Gradle 9.8 / compileSdk 37 (Compose 1.12 needs it), Media3 1.11.
+Package `com.jimboyo.localbeat`. Code map: `tags/` (Ogg/Vorbis comment
+reader), `library/` (scan, cache, grouping), `art/` (cover cache + content
+provider for Auto), `playback/` (MediaLibraryService, browse tree, saved queue),
+`ui/` (Compose).
+
+## UI decisions (from the user, 2026-11-06)
+
+- **Player controls always at the top of the screen**, in every mode, and
+  especially while a song plays. Never a bottom mini-player. Now Playing keeps
+  the full controls (seek, shuffle, prev/play/next, repeat) at the top, with
+  big art and the queue below
+- Musicolet's interface is what bugs them: the font is ugly. Fonts are bundled
+  (no network) and selectable: Figtree (default), Inter, Nunito Sans,
+  Atkinson Hyperlegible Next
+- Selectable light / dark / follow-system theme; Material You colours
+- Big cover art (two-column album grid, full-width covers)
+- Keep from Musicolet: queues, playlists (create **and share**: .m3u8 with
+  paths relative to Music/, so they also work against ~/Music/phone),
+  organizing by genre and decade
+- Lyrics: maybe later, only from the files (embedded or .lrc), no network
+
+## Library data gaps (for CDRipPipeline)
+
+- cyanrip rips have **no GENRE**; old fre:ac rips have odd ones ("alternative
+  hip hop" on Appetite for Destruction). The Genres tab is only as good as this
+- DATE is the CD's release date, not the album's (Kink Kronikles: 1989 vs
+  1972). LocalBeat prefers ORIGINALDATE / ORIGINALYEAR. Since 2026-11-06 the
+  pipeline's `mb-enrich.py` writes them plus up to 3 GENRE values from
+  MusicBrainz (run by rip-cd.sh; backfilled). The old fre:ac rips still lack
+  them (no MBID) until re-ripped
+
+## Android Auto without developer settings
+
+Android Auto hides apps not installed by the Play Store. Options: install
+with the Play Store recorded as installer (`adb install -i com.android.vending`;
+the user's call, not done yet), or publish through Play Console (the user
+has an account) on a testing track.

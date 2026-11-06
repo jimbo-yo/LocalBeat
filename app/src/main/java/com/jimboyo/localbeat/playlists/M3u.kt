@@ -1,0 +1,65 @@
+package com.jimboyo.localbeat.playlists
+
+import com.jimboyo.localbeat.library.Library
+import com.jimboyo.localbeat.library.Track
+
+/** A playlist: a name and a list of paths relative to Music/ (the phone-sync layout). */
+data class Playlist(val id: String, val name: String, val entries: List<String>) {
+    /** The playlist's songs that are on the phone (entries for removed albums are kept but skipped). */
+    fun tracks(lib: Library): List<Track> = entries.mapNotNull(lib::trackByRelativePath)
+}
+
+/**
+ * Extended M3U, UTF-8 (.m3u8). Paths are relative to Music/, so a playlist shared
+ * to the laptop works against ~/Music/phone as well.
+ */
+object M3u {
+    fun write(name: String, entries: List<String>, lib: Library?): String = buildString {
+        append("#EXTM3U\n")
+        append("#PLAYLIST:").append(name.replace('\n', ' ')).append('\n')
+        for (rel in entries) {
+            val t = lib?.trackByRelativePath(rel)
+            if (t != null) {
+                append("#EXTINF:").append(t.durationMs / 1000).append(',')
+                append(t.artist.ifBlank { t.filedUnder }).append(" - ").append(t.title).append('\n')
+            }
+            append(rel).append('\n')
+        }
+    }
+
+    class Parsed(val name: String?, val paths: List<String>)
+
+    fun parse(text: String): Parsed {
+        var name: String? = null
+        val paths = ArrayList<String>()
+        for (raw in text.removePrefix("﻿").lineSequence()) {
+            val line = raw.trim()
+            when {
+                line.isEmpty() -> Unit
+                line.startsWith("#PLAYLIST:") -> name = line.removePrefix("#PLAYLIST:").trim().ifEmpty { null }
+                line.startsWith("#") -> Unit
+                else -> paths += line
+            }
+        }
+        return Parsed(name, paths)
+    }
+
+    /**
+     * Matches a path from someone else's playlist to a track: tries it as given
+     * (absolute, Windows-style, relative to the playlist), then ever-shorter tails
+     * of it, then the bare file name if only one track has it.
+     */
+    fun resolve(path: String, lib: Library): Track? {
+        val slashed = path.replace('\\', '/')
+        // Only file:// URLs are percent-encoded; plain paths may contain a real '%'.
+        val clean = if (!slashed.startsWith("file://")) slashed
+        else slashed.removePrefix("file://").let { runCatching { java.net.URLDecoder.decode(it.replace("+", "%2B"), "UTF-8") }.getOrDefault(it) }
+        val parts = clean.split('/').filter { it.isNotEmpty() && it != "." && it != ".." }
+        if (parts.isEmpty()) return null
+        lib.trackByRelativePath(Library.relativePath(clean))?.let { return it }
+        for (start in parts.indices) {
+            lib.trackByRelativePath(parts.drop(start).joinToString("/"))?.let { return it }
+        }
+        return lib.tracksNamed(parts.last()).singleOrNull()
+    }
+}
