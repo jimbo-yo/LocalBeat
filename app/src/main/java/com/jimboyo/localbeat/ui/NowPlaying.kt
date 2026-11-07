@@ -3,6 +3,7 @@ package com.jimboyo.localbeat.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -80,7 +81,10 @@ fun NowPlayingBody(ui: Ui, lib: Library, modifier: Modifier) {
                     reorder.handleModifier(entry.key).padding(12.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                AlbumArt(t?.let(lib::albumOf), Modifier.size(44.dp), maxPx = 160)
+                Box {
+                    AlbumArt(t?.let(lib::albumOf), Modifier.size(44.dp), maxPx = 160)
+                    if (i == p.currentIndex) PlayingOverlay(Modifier.matchParentSize())
+                }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(
                         t?.title ?: "Missing song", style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,

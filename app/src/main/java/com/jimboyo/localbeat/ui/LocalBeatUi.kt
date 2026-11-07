@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -47,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -77,6 +79,7 @@ sealed interface Screen {
     data class DecadePage(val id: String) : Screen
     data class PlaylistPage(val id: String) : Screen
     data object NowPlaying : Screen
+    data object Equalizer : Screen
 }
 
 /** The bottom navigation bar's destinations. */
@@ -132,6 +135,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
 
     BackHandler(enabled = ui.stack.isNotEmpty() || ui.dest != Dest.ALBUMS) { ui.back() }
 
+    CompositionLocalProvider(LocalPlayer provides ui.player) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             // The player controls are always at the top, whatever screen is showing.
@@ -155,6 +159,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     top == null && ui.dest == Dest.SETTINGS -> SettingsScreen(ui, lib)
+                    top == Screen.Equalizer -> EqualizerScreen(ui)
                     !hasPermission -> Message("LocalBeat needs access to your music files.", "Allow access", onGrant)
                     library == null -> Unit
                     lib.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan() }
@@ -191,6 +196,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
     }
 
     ui.addToPlaylist?.let { tracks -> AddToPlaylistFlow(ui, tracks) }
+    }
 }
 
 private const val GENRE_HELP = "None of your albums have a genre tag yet. New rips get them from MusicBrainz."
@@ -207,6 +213,7 @@ private fun BackBar(ui: Ui, lib: Library, top: Screen) {
                 is Screen.DecadePage -> lib.decade(top.id)?.name.orEmpty()
                 is Screen.PlaylistPage -> ui.app.playlists.get(top.id)?.name.orEmpty()
                 Screen.NowPlaying -> ""
+                Screen.Equalizer -> "Equalizer"
             },
             style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -261,6 +268,10 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
                         listOfNotNull(track?.let { it.artist.ifBlank { it.filedUnder } }, track?.album?.ifBlank { null }, album?.year?.takeIf { it > 0 }?.toString()).joinToString(" · "),
                         style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     )
+                }
+                val eq by ui.app.equalizer.state.collectAsStateWithLifecycle()
+                IconButton(onClick = { ui.open(Screen.Equalizer) }, Modifier.padding(top = 4.dp)) {
+                    Icon(Icons.Default.GraphicEq, "Equalizer", tint = if (eq.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Column(Modifier.padding(start = 12.dp)) {

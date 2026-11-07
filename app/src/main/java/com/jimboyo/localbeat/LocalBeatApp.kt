@@ -2,6 +2,7 @@ package com.jimboyo.localbeat
 
 import android.app.Application
 import com.jimboyo.localbeat.art.ArtStore
+import com.jimboyo.localbeat.audio.EqualizerStore
 import com.jimboyo.localbeat.library.LibraryRepository
 import com.jimboyo.localbeat.playback.QueueStore
 import com.jimboyo.localbeat.playlists.PlaylistStore
@@ -23,6 +24,8 @@ class LocalBeatApp : Application() {
         private set
     lateinit var settings: Settings
         private set
+    lateinit var equalizer: EqualizerStore
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -31,6 +34,7 @@ class LocalBeatApp : Application() {
         queueStore = QueueStore(this)
         playlists = PlaylistStore(this)
         settings = Settings(this)
+        equalizer = EqualizerStore(this)
 
         // After each scan, drop covers of albums that changed or are gone.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

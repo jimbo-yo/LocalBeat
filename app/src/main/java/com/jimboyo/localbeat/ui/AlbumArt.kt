@@ -37,6 +37,9 @@ fun AlbumArt(album: Album?, modifier: Modifier = Modifier, maxPx: Int = 512) {
     val context = LocalContext.current
     val key = album?.let { "${it.id}/$maxPx" }
     val bitmap by produceState(key?.let { ArtMemory.get(it) }, key) {
+        // The state outlives a change of album (only this block restarts), so it
+        // still holds the previous cover here: always replace it.
+        value = key?.let { ArtMemory.get(it) }
         if (album == null || key == null || value != null) return@produceState
         value = withContext(Dispatchers.IO) {
             val file = (context.applicationContext as LocalBeatApp).art.file(album) ?: return@withContext null

@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -41,6 +44,16 @@ fun SettingsScreen(ui: Ui, lib: Library) {
         AppFont.entries.forEach { f ->
             val family = remember(f) { fontFamily(f) }
             Choice(f.label, font == f, sample = "Sittin’ on Top of the World", style = TextStyle(fontFamily = family, fontSize = 18.sp)) { settings.setFont(f) }
+        }
+
+        Section("Sound")
+        val eq by ui.app.equalizer.state.collectAsStateWithLifecycle()
+        Row(Modifier.fillMaxWidth().clickable { ui.open(Screen.Equalizer) }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.GraphicEq, null, tint = if (eq.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.padding(start = 16.dp)) {
+                Text("Equalizer", style = MaterialTheme.typography.bodyLarge)
+                Text(eqSummary(ui, eq.enabled, eq.gains), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
         Section("Library")

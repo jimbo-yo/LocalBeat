@@ -73,6 +73,16 @@ Files are put on the phone by `~/development/CDRipPipeline/phone-sync.py`
   the version ~10 times in Android Auto settings) and **Unknown sources**
   enabled in its developer settings. Updates have been known to reset it
 - Google's Android Auto review only applies to Play Store publishing
+- If LocalBeat still doesn't show in the car: Android Auto settings →
+  **Customize launcher** must have it ticked. On 2026-11-07 it was unticked
+  there after a sideload, which kept it off the car screen even with Unknown
+  sources on (proved from Android Auto's log: `GH.SettingAppRowVH ... Enabled
+  false`). `adb shell dumpsys activity service com.google.android.projection.gearhead`
+  dumps Android Auto's recent log, car sessions included
+- Desktop Head Unit (car screen on the laptop) is unpacked in
+  `~/Android/Sdk/extras/google/auto` (needs `LD_LIBRARY_PATH=lib:.` and stdin
+  kept open), but Google's latest DHU (2.0, 2022) kept dropping the connection
+  with Android Auto 17.9
 
 ## Tools on this laptop
 
@@ -99,7 +109,8 @@ every APK handed out. minSdk 33: other phones need Android 13+.
 AGP 9.5 / Gradle 9.8 / compileSdk 37 (Compose 1.12 needs it), Media3 1.11.
 Package `com.jimboyo.localbeat`. Code map: `tags/` (Ogg/Vorbis comment
 reader), `library/` (scan, cache, grouping), `art/` (cover cache + content
-provider for Auto), `playback/` (MediaLibraryService, browse tree, saved queue),
+provider for Auto), `audio/` (10-band EQ: an ExoPlayer AudioProcessor, so it applies on
+every output incl. Auto; boosts lower the volume to avoid clipping), `playback/` (MediaLibraryService, browse tree, saved queue),
 `ui/` (Compose).
 
 ## UI decisions (from the user, 2026-11-06)

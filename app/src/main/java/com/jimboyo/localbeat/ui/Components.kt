@@ -126,11 +126,17 @@ fun TrackRow(
 
 @Composable
 fun TrackNumber(t: Track) {
-    Text(if (t.trackNumber > 0) "${t.trackNumber}" else "", Modifier.width(28.dp), textAlign = TextAlign.End, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (isCurrent(t.id)) Box(Modifier.width(28.dp), contentAlignment = Alignment.CenterEnd) { PlayingBars(size = 18.dp) }
+    else Text(if (t.trackNumber > 0) "${t.trackNumber}" else "", Modifier.width(28.dp), textAlign = TextAlign.End, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable
-fun Thumb(lib: Library, t: Track) = AlbumArt(lib.albumOf(t), Modifier.size(48.dp), maxPx = 160)
+fun Thumb(lib: Library, t: Track, size: Int = 48) {
+    Box {
+        AlbumArt(lib.albumOf(t), Modifier.size(size.dp), maxPx = 160)
+        if (isCurrent(t.id)) PlayingOverlay(Modifier.matchParentSize())
+    }
+}
 
 @Composable
 fun NameDialog(title: String, initial: String, confirm: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
