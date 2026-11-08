@@ -145,3 +145,11 @@ Android Auto hides apps not installed by the Play Store. Options: install
 with the Play Store recorded as installer (`adb install -i com.android.vending`;
 the user's call, not done yet), or publish through Play Console (the user
 has an account) on a testing track.
+
+## Future: remote access (design note)
+
+Long-term idea (2026-11-08), nothing built: a self-hosted home server with the
+whole library, reachable from anywhere over WireGuard + dynamic DNS (not open
+SSH); first for Phone Sync from anywhere, later a browse-everything,
+cache-what's-played mode (e.g. Navidrome / Subsonic API). Conflicts with the
+no-INTERNET principle: see the open decision in `docs/remote-access.md`.
