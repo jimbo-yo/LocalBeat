@@ -151,5 +151,7 @@ has an account) on a testing track.
 Long-term idea (2026-11-08), nothing built: a self-hosted home server with the
 whole library, reachable from anywhere over WireGuard + dynamic DNS (not open
 SSH); first for Phone Sync from anywhere, later a browse-everything,
-cache-what's-played mode (e.g. Navidrome / Subsonic API). Conflicts with the
-no-INTERNET principle: see the open decision in `docs/remote-access.md`.
+cache-what's-played mode (e.g. Navidrome / Subsonic API). Decided: two
+editions from the same code: the normal one stays offline (no INTERNET); a
+"Connected" edition adds the network and a "Use remote server" checkbox. See
+`docs/remote-access.md`.
