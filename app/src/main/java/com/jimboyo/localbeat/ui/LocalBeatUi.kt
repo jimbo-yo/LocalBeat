@@ -15,14 +15,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GraphicEq
@@ -40,8 +39,6 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -88,6 +85,7 @@ sealed interface Screen {
     data class PlaylistPage(val id: String) : Screen
     data object NowPlaying : Screen
     data object Equalizer : Screen
+    data object Settings : Screen
 }
 
 /** The bottom navigation bar's destinations. */
@@ -97,7 +95,6 @@ enum class Dest(val label: String, val icon: ImageVector) {
     ARTISTS("Artists", Icons.Default.Person),
     PLAYLISTS("Playlists", Icons.AutoMirrored.Filled.QueueMusic),
     BROWSE("Browse", Icons.Default.Explore),
-    SETTINGS("Settings", Icons.Default.Settings),
 }
 
 /** The lists inside Browse. */
@@ -169,7 +166,8 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
             // Only pages opened on top get a title row (they need a back button);
             // the main lists use the whole space.
             if (top != null) BackBar(ui, lib, top)
-            if (top == null && ui.dest in ON_PHONE_TABS && ui.app.server != null && all.tracks.any { it.onServer }) OnPhoneRow(ui)
+            val hasServerSongs = ui.app.server != null && all.tracks.any { it.onServer }
+            if (top == null && ui.dest in ON_PHONE_TABS && hasServerSongs) DownloadStatus(ui)
             if (top == null && ui.dest == Dest.BROWSE) {
                 PrimaryTabRow(selectedTabIndex = ui.browseTab.ordinal) {
                     BrowseTab.entries.forEach { t ->
@@ -179,7 +177,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
-                    top == null && ui.dest == Dest.SETTINGS -> SettingsScreen(ui, lib)
+                    top == Screen.Settings -> SettingsScreen(ui, all)
                     top == Screen.Equalizer -> EqualizerScreen(ui)
                     !hasPermission -> Message("LocalBeat needs access to your music files.", "Allow access", onGrant)
                     library == null -> Unit
@@ -194,7 +192,6 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                         Dest.SEARCH -> SearchScreen(ui, lib)
                         Dest.ARTISTS -> ArtistList(ui, lib)
                         Dest.PLAYLISTS -> PlaylistList(ui, lib)
-                        Dest.SETTINGS -> Unit
                         Dest.BROWSE -> when (ui.browseTab) {
                             BrowseTab.GENRES -> GroupList(ui, lib.genres, emptyText = GENRE_HELP) { ui.open(Screen.GenrePage(it.id)) }
                             BrowseTab.DECADES -> GroupList(ui, lib.decades, emptyText = "No albums have a year tag.") { ui.open(Screen.DecadePage(it.id)) }
@@ -213,6 +210,8 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                         label = { Text(d.label, style = MaterialTheme.typography.labelMedium) },
                     )
                 }
+                // The "On this phone" switch (only with a music server).
+                if (hasServerSongs) OnPhoneToggle(ui)
             }
         }
     }
@@ -224,29 +223,32 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
 private val ON_PHONE_TABS = setOf(Dest.ALBUMS, Dest.SEARCH, Dest.ARTISTS, Dest.BROWSE)
 
 /**
- * The "On this phone" switch above the lists (when there's a music server): hides
- * server songs that aren't kept on the phone. Also says how downloads are going.
+ * The "On this phone" switch in the bottom bar: not a page, a toggle. On, the lists
+ * hide music-server songs that aren't kept on the phone.
  */
 @Composable
-private fun OnPhoneRow(ui: Ui) {
+private fun androidx.compose.foundation.layout.RowScope.OnPhoneToggle(ui: Ui) {
     val onPhone by ui.app.library.onPhoneOnly.collectAsStateWithLifecycle()
+    NavigationBarItem(
+        selected = onPhone,
+        onClick = { ui.app.library.setOnPhoneOnly(!onPhone) },
+        icon = { Icon(if (onPhone) Icons.Filled.PhoneAndroid else Icons.Outlined.PhoneAndroid, if (onPhone) "Showing only music on this phone" else "Show only music on this phone") },
+        label = { Text("On phone", style = MaterialTheme.typography.labelMedium, maxLines = 1) },
+    )
+}
+
+/** How downloads to the phone are going, above the lists; nothing when there are none. */
+@Composable
+private fun DownloadStatus(ui: Ui) {
     val off = ui.offline
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        FilterChip(
-            selected = onPhone, onClick = { ui.app.library.setOnPhoneOnly(!onPhone) },
-            label = { Text("On this phone") },
-            leadingIcon = { Icon(if (onPhone) Icons.Default.Check else Icons.Outlined.PhoneAndroid, null, Modifier.size(FilterChipDefaults.IconSize)) },
-        )
-        Spacer(Modifier.width(12.dp))
-        val status = when {
-            off.downloading != null -> if (off.queued == 1) "Downloading 1 song" else "Downloading ${off.queued} songs"
-            else -> off.waiting
-        }
-        if (status != null) Text(
-            status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
-        )
-    }
+    val status = when {
+        off.downloading != null -> if (off.queued == 1) "Downloading 1 song to the phone" else "Downloading ${off.queued} songs to the phone"
+        else -> off.waiting
+    } ?: return
+    Text(
+        status, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
+    )
 }
 
 private const val GENRE_HELP = "None of your albums have a genre tag yet. New rips get them from MusicBrainz."
@@ -264,6 +266,7 @@ private fun BackBar(ui: Ui, lib: Library, top: Screen) {
                 is Screen.PlaylistPage -> ui.app.playlists.get(top.id)?.name.orEmpty()
                 Screen.NowPlaying -> ""
                 Screen.Equalizer -> "Equalizer"
+                Screen.Settings -> "Settings"
             },
             style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
@@ -305,6 +308,9 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
                     Icon(if (p.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/pause", Modifier.size(32.dp))
                 }
                 IconButton(onClick = { p.next() }, enabled = track != null) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(30.dp)) }
+                IconButton(onClick = { ui.open(Screen.Settings) }, Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             Progress(p) { pos, dur ->
                 LinearProgressIndicator(progress = { if (dur > 0) pos.toFloat() / dur else 0f }, modifier = Modifier.fillMaxWidth().height(3.dp), gapSize = 0.dp, drawStopIndicator = {})
