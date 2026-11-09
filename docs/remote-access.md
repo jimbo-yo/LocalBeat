@@ -147,6 +147,12 @@ played eviction.
 
 Two ways to serve it:
 
+**Decided (2026-11-09): Navidrome to start**, client side first, developed
+against Navidrome on the laptop (LocalBeatServer `dev/navidrome/`; trial
+findings in its CLAUDE.md). The server should also run as a background
+"desktop server" on an existing Linux or Windows computer, not only on a Pi;
+Navidrome runs on both.
+
 - **Navidrome** on the server (recommended starting point): a lightweight,
   self-hosted music server speaking the Subsonic/OpenSubsonic API; converts
   FLAC to Opus on the fly. LocalBeat becomes a Subsonic client with an offline

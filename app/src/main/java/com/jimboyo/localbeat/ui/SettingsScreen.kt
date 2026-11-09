@@ -68,7 +68,9 @@ fun SettingsScreen(ui: Ui, lib: Library) {
         Section("About")
         Text(
             "LocalBeat ${BuildConfig.VERSION_NAME}. Plays music stored on this phone. " +
-                "No internet access, no accounts, nothing leaves the phone.\n\n" +
+                (if (BuildConfig.CONNECTED) "Connected edition: it can also use network features that talk only to " +
+                    "your own devices. No accounts with anyone else, no tracking.\n\n"
+                else "No internet access, no accounts, nothing leaves the phone.\n\n") +
                 "Fonts: Figtree, Inter, Nunito Sans and Atkinson Hyperlegible Next, under the SIL Open Font License.",
             Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

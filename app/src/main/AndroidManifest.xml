@@ -8,10 +8,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Local music only: strip network permissions even if a library asks for them,
-         so "no network access" stays verifiable in Android's app info. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- Network permissions are per edition: src/offline strips them,
+         src/connected adds them. -->
 
     <application
         android:name=".LocalBeatApp"

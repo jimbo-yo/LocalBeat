@@ -66,10 +66,11 @@ Put on the phone by `~/development/CDRipPipeline/phone-sync.py` (copies of
 
 ```sh
 export JAVA_HOME=/opt/android-studio/jbr
-./gradlew :app:testDebugUnitTest      # incl. every file in ~/Music/phone
-./gradlew dist                         # release APK -> dist/LocalBeat-<version>.apk
+./gradlew :app:testOfflineDebugUnitTest   # incl. every file in ~/Music/phone
+./gradlew :app:testConnectedDebugUnitTest
+./gradlew dist    # both editions -> dist/LocalBeat-<v>.apk, LocalBeat-Connected-<v>.apk
 adb install -r dist/LocalBeat-<version>.apk
-aapt2 dump permissions <apk>          # must never list INTERNET
+aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
 ```
 
 - Android Studio at `/opt/android-studio`; SDK `~/Android/Sdk` (platforms
@@ -83,6 +84,18 @@ aapt2 dump permissions <apk>          # must never list INTERNET
   an ExoPlayer AudioProcessor, so it applies on every output; boosts lower the
   volume to avoid clipping; takes 16-bit or float PCM only), `playback/`
   (MediaLibraryService, browse tree, saved queue), `ui/` (Compose)
+
+## Editions (product flavours)
+
+- **offline** (`src/offline`): no INTERNET permission, no network code.
+  **connected** (`src/connected`): useful, non-spyware network features only
+  (first: the remote server). `BuildConfig.CONNECTED` tells them apart
+- Same package and key: installing one over the other keeps the library and
+  settings
+- Network code goes in `src/connected` only; `main` sees it through
+  interfaces. Check the offline APK stays clean (`aapt2`, and grep its dex)
+- Cast/DLNA output is built but parked on branch `cast-dlna` (untested on
+  real devices)
 
 ## UI decisions (from the user)
 

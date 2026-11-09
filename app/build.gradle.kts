@@ -22,8 +22,8 @@ android {
         // Personal app for a Pixel 9; 33 is the first release with READ_MEDIA_AUDIO.
         minSdk = 33
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 8
+        versionName = "0.8"
     }
 
     signingConfigs {
@@ -34,6 +34,25 @@ android {
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
             }
+        }
+    }
+
+    // Two editions from the same code (docs/remote-access.md, "Decided"):
+    // offline has no INTERNET permission and no network code at all; connected
+    // adds useful, non-spyware network features (first: the remote server).
+    // Same package and key, so installing one over the other keeps the library
+    // and settings. Network code lives in src/connected only.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("offline") {
+            dimension = "edition"
+            isDefault = true
+            buildConfigField("boolean", "CONNECTED", "false")
+        }
+        create("connected") {
+            dimension = "edition"
+            versionNameSuffix = "-connected"
+            buildConfigField("boolean", "CONNECTED", "true")
         }
     }
 
@@ -77,10 +96,16 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
 }
 
-// `./gradlew dist`: a release APK to share, named after the version, in dist/.
+// `./gradlew dist`: release APKs of both editions, named after the version, in dist/:
+// LocalBeat-<version>.apk (offline) and LocalBeat-Connected-<version>.apk.
 tasks.register<Copy>("dist") {
-    dependsOn("assembleRelease")
-    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+    dependsOn("assembleOfflineRelease", "assembleConnectedRelease")
+    val version = android.defaultConfig.versionName
+    from(layout.buildDirectory.file("outputs/apk/offline/release/app-offline-release.apk")) {
+        rename { "LocalBeat-$version.apk" }
+    }
+    from(layout.buildDirectory.file("outputs/apk/connected/release/app-connected-release.apk")) {
+        rename { "LocalBeat-Connected-$version.apk" }
+    }
     into(rootProject.layout.projectDirectory.dir("dist"))
-    rename { "LocalBeat-${android.defaultConfig.versionName}.apk" }
 }
