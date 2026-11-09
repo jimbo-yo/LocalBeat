@@ -148,6 +148,10 @@ has an account) on a testing track.
 
 ## Future: remote access (design note)
 
+The server side is its own repo since 2026-11-08: **`~/development/LocalBeatServer`**
+(Raspberry Pi system: FLAC library, WireGuard, Opus on demand). Keep its
+CLAUDE.md and `docs/remote-access.md` in step.
+
 Long-term idea (2026-11-08), nothing built: a self-hosted home server with the
 whole library, reachable from anywhere over WireGuard + dynamic DNS (not open
 SSH); first for Phone Sync from anywhere, later a browse-everything,
