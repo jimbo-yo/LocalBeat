@@ -27,6 +27,26 @@ sealed interface ServerStatus {
 }
 
 /**
+ * Server songs kept on the phone ("pinned"), so they play without the server:
+ * no Wi-Fi, no WireGuard, no coverage. Track IDs throughout.
+ */
+data class OfflineState(
+    /** Songs the user asked to keep, in the order asked. */
+    val pinned: Set<String> = emptySet(),
+    /** Pinned songs whose file is on the phone. */
+    val ready: Set<String> = emptySet(),
+    /** The song downloading now, and how far (0–1; an estimate when the server doesn't say the size). */
+    val downloading: String? = null,
+    val progress: Float = 0f,
+    /** Why downloads are on hold (no Wi-Fi, server off or unreachable), or null. */
+    val waiting: String? = null,
+    /** Space the kept songs take. */
+    val bytes: Long = 0,
+) {
+    val queued: Int get() = pinned.count { it !in ready }
+}
+
+/**
  * The user's own music server: Navidrome, or later LocalBeat's own server
  * (both speak OpenSubsonic; extras only when the server declares them). Only the
  * Connected edition has an implementation (see `Edition`); in the offline
@@ -47,8 +67,19 @@ interface MusicServer {
     /** Fetches the catalogue again. */
     fun refresh()
 
-    /** Where the player streams a server song from. */
+    /** Where the player plays a server song from: its file if pinned, else the stream. */
     fun streamUri(track: Track): Uri?
+    /**
+     * Checked as each song loads: a queued stream whose song has since been pinned
+     * plays from the file; a pinned file that was removed streams again.
+     */
+    fun resolve(uri: Uri): Uri
+
+    val offline: StateFlow<OfflineState>
+    /** Keeps these songs on the phone (the server's ones; downloaded in the background). */
+    fun pin(tracks: List<Track>)
+    /** Removes these songs from the phone (or stops downloading them). */
+    fun unpin(trackIds: Collection<String>)
     /**
      * Why music can't come from the server right now (on mobile data with it
      * turned off), or null if it can. Checked as each song starts, so a queue

@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Person
@@ -37,6 +40,8 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -58,6 +63,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,6 +77,7 @@ import com.jimboyo.localbeat.library.Library
 import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.playback.BrowseTree
 import com.jimboyo.localbeat.playlists.Playlist
+import com.jimboyo.localbeat.server.OfflineState
 import kotlinx.coroutines.delay
 
 sealed interface Screen {
@@ -111,6 +118,8 @@ class Ui(
     var addToPlaylist by mutableStateOf<List<Track>?>(null)
     /** What's typed in the Search tab (kept while browsing results). */
     var searchQuery by mutableStateOf("")
+    /** Music-server songs kept on the phone, and downloads (Connected edition). */
+    var offline by mutableStateOf(OfflineState())
 
     fun open(s: Screen) {
         if (stack.lastOrNull() != s) stack.add(s)
@@ -130,29 +139,37 @@ class Ui(
     fun toast(text: String) = Toast.makeText(app, text, Toast.LENGTH_SHORT).show()
 }
 
+/** The UI state, for components deep in lists (the keep-on-phone button). */
+val LocalUi = staticCompositionLocalOf<Ui?> { null }
+
 @Composable
 fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
+    // Everything, for the player; the lists show what the "On this phone" switch allows.
     val library by ui.app.library.library.collectAsStateWithLifecycle()
+    val shown by ui.app.library.shown.collectAsStateWithLifecycle()
     val scanning by ui.app.library.scanning.collectAsStateWithLifecycle()
-    val lib = library ?: Library.EMPTY
+    val all = library ?: Library.EMPTY
+    val lib = shown ?: all
     val top = ui.stack.lastOrNull()
 
+    LaunchedEffect(Unit) { ui.app.server?.offline?.collect { ui.offline = it } }
     BackHandler(enabled = ui.stack.isNotEmpty() || ui.dest != Dest.ALBUMS) { ui.back() }
 
-    CompositionLocalProvider(LocalPlayer provides ui.player) {
+    CompositionLocalProvider(LocalPlayer provides ui.player, LocalUi provides ui) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             // The player controls are always at the top, whatever screen is showing.
-            TopControls(ui, lib, expanded = top == Screen.NowPlaying)
+            TopControls(ui, all, expanded = top == Screen.NowPlaying)
             if (scanning) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
 
             if (top == Screen.NowPlaying) {
-                NowPlayingBody(ui, lib, Modifier.weight(1f).navigationBarsPadding())
+                NowPlayingBody(ui, all, Modifier.weight(1f).navigationBarsPadding())
                 return@Column
             }
             // Only pages opened on top get a title row (they need a back button);
             // the main lists use the whole space.
             if (top != null) BackBar(ui, lib, top)
+            if (top == null && ui.dest in ON_PHONE_TABS && ui.app.server != null && all.tracks.any { it.onServer }) OnPhoneRow(ui)
             if (top == null && ui.dest == Dest.BROWSE) {
                 PrimaryTabRow(selectedTabIndex = ui.browseTab.ordinal) {
                     BrowseTab.entries.forEach { t ->
@@ -166,7 +183,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                     top == Screen.Equalizer -> EqualizerScreen(ui)
                     !hasPermission -> Message("LocalBeat needs access to your music files.", "Allow access", onGrant)
                     library == null -> Unit
-                    lib.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan() }
+                    all.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan() }
                     top is Screen.AlbumPage -> lib.album(top.id)?.let { AlbumPage(ui, lib, it) }
                     top is Screen.ArtistPage -> lib.artist(top.id)?.let { ArtistPage(ui, lib, it) }
                     top is Screen.GenrePage -> lib.genre(top.id)?.let { GroupPage(ui, it, BrowseTree.GENRE + it.id) }
@@ -201,6 +218,34 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
     }
 
     ui.addToPlaylist?.let { tracks -> AddToPlaylistFlow(ui, tracks) }
+    }
+}
+
+private val ON_PHONE_TABS = setOf(Dest.ALBUMS, Dest.SEARCH, Dest.ARTISTS, Dest.BROWSE)
+
+/**
+ * The "On this phone" switch above the lists (when there's a music server): hides
+ * server songs that aren't kept on the phone. Also says how downloads are going.
+ */
+@Composable
+private fun OnPhoneRow(ui: Ui) {
+    val onPhone by ui.app.library.onPhoneOnly.collectAsStateWithLifecycle()
+    val off = ui.offline
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        FilterChip(
+            selected = onPhone, onClick = { ui.app.library.setOnPhoneOnly(!onPhone) },
+            label = { Text("On this phone") },
+            leadingIcon = { Icon(if (onPhone) Icons.Default.Check else Icons.Outlined.PhoneAndroid, null, Modifier.size(FilterChipDefaults.IconSize)) },
+        )
+        Spacer(Modifier.width(12.dp))
+        val status = when {
+            off.downloading != null -> if (off.queued == 1) "Downloading 1 song" else "Downloading ${off.queued} songs"
+            else -> off.waiting
+        }
+        if (status != null) Text(
+            status, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

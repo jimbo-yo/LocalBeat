@@ -70,12 +70,15 @@ class PlaybackService : MediaLibraryService() {
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build()
         }
-        // Server songs (Connected edition) are checked as they start: e.g. Wi-Fi only.
+        // Server songs (Connected edition) are checked as they start: the copy on the
+        // phone if there is one, else the stream, if allowed (e.g. Wi-Fi only).
         val dataSources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
-            if (spec.uri.scheme == "http" || spec.uri.scheme == "https") {
-                app.server?.streamBlockedReason()?.let { throw StreamBlockedException(it) }
+            val server = app.server
+            val uri = server?.resolve(spec.uri) ?: spec.uri
+            if (uri.scheme == "http" || uri.scheme == "https") {
+                server?.streamBlockedReason()?.let { throw StreamBlockedException(it) }
             }
-            spec
+            if (uri == spec.uri) spec else spec.withUri(uri)
         }
         player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
@@ -153,7 +156,7 @@ class PlaybackService : MediaLibraryService() {
 
     private suspend fun notifyChanged(vararg parentIds: String) {
         val s = session ?: return
-        val lib = app.library.awaitLibrary()
+        val lib = app.library.awaitShown()
         for (id in parentIds) s.notifyChildrenChanged(id, tree.children(id, lib)?.size ?: 0, null)
     }
 
@@ -224,7 +227,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onGetItem(
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, mediaId: String,
         ): ListenableFuture<LibraryResult<MediaItem>> = scope.future {
-            tree.item(mediaId, app.library.awaitLibrary())?.let { LibraryResult.ofItem(it, null) }
+            tree.item(mediaId, app.library.awaitShown())?.let { LibraryResult.ofItem(it, null) }
                 ?: LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
         }
 
@@ -232,7 +235,7 @@ class PlaybackService : MediaLibraryService() {
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, parentId: String,
             page: Int, pageSize: Int, params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future {
-            val children = tree.children(parentId, app.library.awaitLibrary())
+            val children = tree.children(parentId, app.library.awaitShown())
             if (children == null) LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
             else LibraryResult.ofItemList(children.page(page, pageSize), params)
         }
@@ -240,7 +243,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onSearch(
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String, params: LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> = scope.future {
-            val count = tree.search(query, app.library.awaitLibrary()).size
+            val count = tree.search(query, app.library.awaitShown()).size
             session.notifySearchResultChanged(browser, query, count, params)
             LibraryResult.ofVoid()
         }
@@ -249,14 +252,14 @@ class PlaybackService : MediaLibraryService() {
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String,
             page: Int, pageSize: Int, params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future {
-            LibraryResult.ofItemList(tree.search(query, app.library.awaitLibrary()).page(page, pageSize), params)
+            LibraryResult.ofItemList(tree.search(query, app.library.awaitShown()).page(page, pageSize), params)
         }
 
         /** "Add to queue": albums and artists add all their songs. */
         override fun onAddMediaItems(
             mediaSession: MediaSession, controller: MediaSession.ControllerInfo, mediaItems: List<MediaItem>,
         ): ListenableFuture<List<MediaItem>> = scope.future {
-            val lib = app.library.awaitLibrary()
+            val lib = app.library.awaitShown()
             mediaItems.flatMap { item ->
                 val id = item.mediaId
                 // A track in context is just that track when adding (the context is for "play").
@@ -271,7 +274,7 @@ class PlaybackService : MediaLibraryService() {
             mediaSession: MediaSession, controller: MediaSession.ControllerInfo, mediaItems: List<MediaItem>,
             startIndex: Int, startPositionMs: Long,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = scope.future {
-            val lib = app.library.awaitLibrary()
+            val lib = app.library.awaitShown()
             if (mediaItems.size == 1) {
                 val q = tree.resolve(mediaItems[0], lib)
                 MediaSession.MediaItemsWithStartPosition(q.tracks.map { tree.queueItem(it, lib) }, q.startIndex, startPositionMs)

@@ -153,6 +153,20 @@ findings in its CLAUDE.md). The server should also run as a background
 "desktop server" on an existing Linux or Windows computer, not only on a Pi;
 Navidrome runs on both.
 
+**2026-11-09:** the Rust server is being built now, instead of setting up
+Navidrome on the Pi. It **pre-converts the whole library to Opus in the
+background** (the user's choice; it replaces "Opus on demand"), because on
+the Pi converting on request would take about a tenth of a song's length,
+so every first play would wait and couldn't seek. Details in LocalBeatServer's
+CLAUDE.md.
+
+Also decided for the server (2026-11-09; details in LocalBeatServer's
+CLAUDE.md, "Installing and onboarding"): it runs as a normal background
+service (systemd / Windows service), no containers; it **announces itself on
+the home network** so LocalBeat can offer it in Settings without typing an
+address (LocalBeat side to build: discovery plus the `localbeat://connect`
+link); and a small **admin web page** later to add and remove people.
+
 Later, our own **Rust** server for the same OpenSubsonic subset. LocalBeat
 supports **both**: it uses only the standard calls both implement, and extras
 only as named OpenSubsonic extensions it finds via `getOpenSubsonicExtensions`

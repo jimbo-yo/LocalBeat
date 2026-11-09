@@ -46,6 +46,7 @@ fun ServerSection(ui: Ui) {
         }
         Switch(settings.enabled, { on -> server.update(settings.copy(enabled = on, address = address, username = username, password = password)) })
     }
+    KeptOnPhone(ui)
     if (!settings.enabled) return
 
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -87,3 +88,33 @@ fun ServerSection(ui: Ui) {
         )
     }
 }
+
+/** How many server songs are kept on the phone, the space they take, and a way to remove them all. */
+@Composable
+private fun KeptOnPhone(ui: Ui) {
+    val server = ui.app.server ?: return
+    val off by server.offline.collectAsStateWithLifecycle()
+    if (off.pinned.isEmpty()) return
+    var confirm by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Kept on this phone", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                listOfNotNull(
+                    "${plural(off.ready.size, "song")}, ${megabytes(off.bytes)}",
+                    off.queued.takeIf { it > 0 }?.let { "$it to download" },
+                    off.waiting,
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        OutlinedButton(onClick = { confirm = true }) { Text("Remove all") }
+    }
+    if (confirm) ConfirmDialog(
+        "Remove all from phone?", "The songs stay on the music server; they just won't play without it.", "Remove all",
+        onDismiss = { confirm = false },
+    ) { server.unpin(off.pinned) }
+}
+
+private fun megabytes(bytes: Long): String =
+    if (bytes >= 1L shl 30) "%.1f GB".format(bytes / (1L shl 30).toDouble()) else "${bytes shr 20} MB"

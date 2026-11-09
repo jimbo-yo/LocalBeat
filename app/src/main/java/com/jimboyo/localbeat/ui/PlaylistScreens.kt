@@ -112,7 +112,8 @@ fun PlaylistPage(ui: Ui, lib: Library, id: String) {
                         Action("Share") { ui.sharePlaylist(playlist) },
                         Action("Rename") { renaming = true },
                         Action("Delete") { deleting = true },
-                    ),
+                    ) + keepActions(ui) { tracks },
+                    tracks = tracks,
                 )
                 if (entries.isEmpty()) Text(
                     "Empty. Use “Add to playlist” on songs, albums or the queue.",

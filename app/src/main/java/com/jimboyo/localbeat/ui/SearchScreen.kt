@@ -90,7 +90,7 @@ fun SearchScreen(ui: Ui, lib: Library) {
                         Column(Modifier.weight(1f).padding(start = 16.dp)) {
                             Text(album.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (album.tracks.all { it.onServer }) ServerMark(Modifier.padding(end = 4.dp))
+                                KeepMark(album.tracks, Modifier.padding(end = 4.dp))
                                 Text(
                                     listOfNotNull(album.artist, album.year.takeIf { it > 0 }?.toString()).joinToString(" · "),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,

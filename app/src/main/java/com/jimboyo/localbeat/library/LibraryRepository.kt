@@ -47,8 +47,23 @@ class LibraryRepository(private val context: Context) {
     @Volatile private var serverTracks: List<Track> = emptyList()
 
     private val _library = MutableStateFlow<Library?>(null)
-    /** Null until the first load (from the cache, else a scan) finishes. */
+    /** Everything: the phone's songs and the server's. Null until the first load (from the cache, else a scan) finishes. */
     val library: StateFlow<Library?> = _library.asStateFlow()
+
+    private val prefs = context.getSharedPreferences("library", Context.MODE_PRIVATE)
+    private val _onPhoneOnly = MutableStateFlow(prefs.getBoolean("onPhoneOnly", false))
+    /** The lists show only what plays without the server: the phone's songs and the server songs kept on it. */
+    val onPhoneOnly: StateFlow<Boolean> = _onPhoneOnly.asStateFlow()
+    /** Server songs kept on the phone (Connected edition). */
+    @Volatile private var keptIds: Set<String> = emptySet()
+
+    private val _shown = MutableStateFlow<Library?>(null)
+    /**
+     * What the lists (and Android Auto) show: [library], or with [onPhoneOnly] just
+     * what's on the phone. Playback looks songs up in [library], so a server song
+     * already queued still plays.
+     */
+    val shown: StateFlow<Library?> = _shown.asStateFlow()
 
     private val _scanning = MutableStateFlow(false)
     val scanning: StateFlow<Boolean> = _scanning.asStateFlow()
@@ -87,6 +102,31 @@ class LibraryRepository(private val context: Context) {
     suspend fun awaitLibrary(): Library {
         start()
         return library.filterNotNull().first()
+    }
+
+    suspend fun awaitShown(): Library {
+        start()
+        return shown.filterNotNull().first()
+    }
+
+    fun setOnPhoneOnly(on: Boolean) {
+        if (_onPhoneOnly.value == on) return
+        _onPhoneOnly.value = on
+        prefs.edit().putBoolean("onPhoneOnly", on).apply()
+        republish()
+    }
+
+    /** The server songs kept on the phone changed. */
+    fun setKept(ids: Set<String>) {
+        if (ids == keptIds) return
+        keptIds = ids
+        if (_onPhoneOnly.value) republish()
+    }
+
+    @Synchronized
+    private fun republish() {
+        phoneTracks?.let(::publish)
+        _generation.value++
     }
 
     /**
@@ -150,7 +190,11 @@ class LibraryRepository(private val context: Context) {
     @Synchronized
     private fun publish(phone: List<Track>) {
         phoneTracks = phone
-        _library.value = Library(Library.merge(phone, serverTracks))
+        val all = Library(Library.merge(phone, serverTracks))
+        _library.value = all
+        _shown.value =
+            if (!_onPhoneOnly.value || all.tracks.none { it.onServer }) all
+            else Library(all.tracks.filter { !it.onServer || it.id in keptIds })
     }
 
     private class Row(val id: Long, val path: String, val modified: Long, val size: Long, val durationMs: Long, val dateAdded: Long)

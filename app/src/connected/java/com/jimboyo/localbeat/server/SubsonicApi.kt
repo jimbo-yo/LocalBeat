@@ -125,6 +125,9 @@ internal class SubsonicApi(
          * rules (not the server's). The album's MusicBrainz release ID and original
          * date come from the album list; [serverKey] keeps IDs apart per server.
          */
+        /** LocalBeat's track ID for a server song (kept apart per server and user). */
+        fun trackId(serverKey: String, songId: String) = "s" + shortHash("$serverKey|$songId")
+
         fun toTracks(serverKey: String, albums: List<JSONObject>, songs: List<JSONObject>): List<Track> {
             val albumsById = albums.associateBy { it.optString("id") }
             return songs.mapNotNull { s ->
@@ -134,7 +137,7 @@ internal class SubsonicApi(
                     ?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }
                     ?: listOfNotNull(s.optString("genre").takeIf { it.isNotBlank() })
                 Track(
-                    id = "s" + shortHash("$serverKey|$id"),
+                    id = trackId(serverKey, id),
                     mediaStoreId = -1,
                     path = "server:" + s.optString("path", id),
                     modified = 0,

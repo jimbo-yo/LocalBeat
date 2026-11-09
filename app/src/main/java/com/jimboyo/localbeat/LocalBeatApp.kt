@@ -44,6 +44,9 @@ class LocalBeatApp : Application() {
             CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
                 s.tracks.collect { library.setServerTracks(it) }
             }
+            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+                s.offline.collect { library.setKept(it.ready) }
+            }
         }
 
         // After each scan, drop covers of albums that changed or are gone.

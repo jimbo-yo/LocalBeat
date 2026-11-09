@@ -111,9 +111,10 @@ fun GroupList(ui: Ui, groups: List<AlbumGroup>, emptyText: String, onOpen: (Albu
 @Composable
 fun GroupPage(ui: Ui, g: AlbumGroup, mediaId: String) {
     AlbumGrid(ui, g.albums, header = {
+        val tracks = g.albums.flatMap { it.tracks }
         PlayButtons(
             onPlay = { ui.player.play(mediaId) }, onShuffle = { ui.player.play(mediaId, shuffled = true) },
-            more = queueActions(ui, mediaId) { g.albums.flatMap { it.tracks } },
+            more = queueActions(ui, mediaId) { tracks }, tracks = tracks,
         )
     }) { a -> if (a.year > 0) "${a.artist} · ${a.year}" else a.artist }
 }
@@ -155,7 +156,7 @@ fun AlbumPage(ui: Ui, lib: Library, album: Album) {
             }
             PlayButtons(
                 onPlay = { ui.player.play(albumId) }, onShuffle = { ui.player.play(albumId, shuffled = true) },
-                more = albumActions(ui, album),
+                more = albumActions(ui, album), tracks = album.tracks,
             )
         }
         var lastDisc = 0
@@ -188,9 +189,10 @@ fun ArtistPage(ui: Ui, lib: Library, artist: Artist) {
                     "${plural(artist.albums.size, "album")} · ${plural(artist.tracks.size, "song")}",
                     modifier = Modifier.padding(horizontal = 6.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val tracks = artist.tracks
                 PlayButtons(
                     onPlay = { ui.player.play(allId) }, onShuffle = { ui.player.play(allId, shuffled = true) },
-                    more = queueActions(ui, allId) { artist.tracks },
+                    more = queueActions(ui, allId) { tracks }, tracks = tracks,
                 )
             }
         }
