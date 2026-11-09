@@ -157,9 +157,35 @@ Two ways to serve it:
 ### Phase 3 in LocalBeat: how it should work (from the user, 2026-11-08)
 
 **Turning it on** (Connected edition only; see "Decided" below)
-- Remote access is **off by default**. A checkbox in Settings turns it on, and
-  only then do the remote settings appear: the server's name/address (and
-  whatever login or key it needs).
+- Remote access is **off by default**. A checkbox in Settings ("Use remote
+  server") turns it on, and only then do the remote settings appear: server
+  address, login/token, and the storage settings below.
+
+**Setting up a phone** (2026-11-08)
+
+Two separate steps, two QR codes. The Pi stays headless: no monitor, no X.
+
+1. **The tunnel: the official WireGuard app** (existing, free, open source,
+   by the WireGuard project; Play Store and F-Droid). Nothing of ours.
+   - On the Pi, make a peer for the phone and print its config as a QR code
+     in the terminal: `qrencode -t ansiutf8 < phone.conf`, over SSH from the
+     laptop. Later, a small admin page on the server ("Add a person") can show
+     it instead.
+   - In the WireGuard app: **+** → **Scan from QR code**. Optionally limit the
+     tunnel to LocalBeat ("included applications") and turn on Android's
+     **Always-on VPN** for it (Settings → Network → VPN).
+   - This QR holds the phone's **private key**: show it once on a trusted
+     screen and scan it on the spot; never screenshot, email or text it.
+     Delete the config and key from the Pi afterwards. If it leaks: remove
+     that peer, make a new one.
+   - LocalBeat never sees WireGuard keys (handling them would make it a VPN
+     app).
+2. **LocalBeat: the server address and login.** Typed in, or a second QR
+   holding a link such as `localbeat://connect?server=10.8.0.1:4533&token=…`:
+   the phone's normal camera app reads QR codes and opens links, so it opens
+   LocalBeat with the settings filled in. LocalBeat needs no camera permission
+   and no scanner of its own. The token is a secret too (same care, less
+   damage: it only works through the tunnel).
 
 **Storage**
 - Settings shows the phone's **free space** and lets the user set **how much
