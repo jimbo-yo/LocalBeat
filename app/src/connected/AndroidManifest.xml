@@ -3,4 +3,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- The music server is the user's own, reached over WireGuard (already
+         encrypted) or the home network, usually by IP address over plain HTTP.
+         LocalBeat only ever connects to the address set in Settings. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

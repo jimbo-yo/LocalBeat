@@ -53,7 +53,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
-        tree = BrowseTree(app.art) { app.playlists.playlists.value }
+        tree = BrowseTree(app.art, { app.playlists.playlists.value }) { t -> app.server?.streamUri(t) }
         // The equaliser runs inside the audio sink, so it applies to every output.
         val equalizer = EqualizerProcessor { app.equalizer.state.value }
         val renderers = object : DefaultRenderersFactory(this) {

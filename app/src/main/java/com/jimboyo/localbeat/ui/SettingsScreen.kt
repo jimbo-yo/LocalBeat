@@ -56,6 +56,8 @@ fun SettingsScreen(ui: Ui, lib: Library) {
             }
         }
 
+        ServerSection(ui)
+
         Section("Library")
         Text(
             "${plural(lib.tracks.size, "song")}, ${plural(lib.albums.size, "album")}, ${plural(lib.artists.size, "artist")} in Internal Storage/Music.",
@@ -78,7 +80,7 @@ fun SettingsScreen(ui: Ui, lib: Library) {
 }
 
 @Composable
-private fun Section(title: String) {
+internal fun Section(title: String) {
     HorizontalDivider(Modifier.padding(top = 8.dp))
     Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp))
 }

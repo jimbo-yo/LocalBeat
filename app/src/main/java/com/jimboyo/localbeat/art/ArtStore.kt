@@ -17,7 +17,11 @@ import java.io.FileInputStream
  * cache folder. File names include the source file's modified time, so a re-ripped
  * album gets its new cover.
  */
-class ArtStore(private val context: Context) {
+class ArtStore(
+    private val context: Context,
+    /** Covers of songs on the music server (Connected edition). */
+    private val serverCover: (Track) -> ByteArray? = { null },
+) {
     private val dir = File(context.cacheDir, "art").apply { mkdirs() }
 
     /** What Android Auto, the notification and the lock screen load the cover from. */
@@ -38,6 +42,7 @@ class ArtStore(private val context: Context) {
     }
 
     private fun extract(track: Track): ByteArray? {
+        if (track.onServer) return serverCover(track)
         val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, track.mediaStoreId)
         context.contentResolver.openFileDescriptor(uri, "r")!!.use { pfd ->
             FileInputStream(pfd.fileDescriptor).channel.use { ch ->

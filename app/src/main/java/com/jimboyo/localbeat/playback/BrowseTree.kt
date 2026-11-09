@@ -27,7 +27,12 @@ import com.jimboyo.localbeat.playlists.Playlist
  * - `<list>/<position>|t:<id>`: a track tapped in a list; plays the list from there.
  *   The position tells repeats in a playlist apart.
  */
-class BrowseTree(private val art: ArtStore, private val playlists: () -> List<Playlist>) {
+class BrowseTree(
+    private val art: ArtStore,
+    private val playlists: () -> List<Playlist>,
+    /** Where a music-server song streams from (Connected edition). */
+    private val serverUri: (Track) -> android.net.Uri? = { null },
+) {
 
     // ---- browsing ----
 
@@ -218,7 +223,7 @@ class BrowseTree(private val art: ArtStore, private val playlists: () -> List<Pl
         if (group != null) metadata.setExtras(Bundle().apply { putString(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_GROUP_TITLE, group) })
         return MediaItem.Builder()
             .setMediaId(mediaId)
-            .setUri(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, track.mediaStoreId))
+            .setUri(if (track.onServer) serverUri(track) else ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, track.mediaStoreId))
             .setMediaMetadata(metadata.build())
             .build()
     }

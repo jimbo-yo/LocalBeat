@@ -24,9 +24,15 @@ data class Track(
     val genre: String,
     val musicBrainzAlbumId: String,
     val hasEmbeddedArt: Boolean,
+    /** On a music server, not the phone: the server's song ID (empty for files on the phone). */
+    val serverSongId: String = "",
+    /** The server's cover art ID for this song, if it has one. */
+    val serverCoverArt: String = "",
 ) {
     /** Who the album is filed under: the album artist, else the track artist. */
     val filedUnder: String get() = albumArtist.ifBlank { artist }
+    /** Only on the music server (Connected edition), not on the phone. */
+    val onServer: Boolean get() = serverSongId.isNotEmpty()
 
     companion object {
         fun idForPath(path: String) = "t" + shortHash(path)
@@ -170,6 +176,30 @@ class Library(tracks: List<Track>) {
         private fun titleCase(s: String): String =
             if (s != s.lowercase(Locale.ROOT)) s
             else s.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.titlecase(Locale.ROOT) } }
+
+        /**
+         * The phone's songs plus the server's, each song once: a server song that's
+         * also on the phone (same album and disc/track number, or same title) is
+         * dropped, so the phone's copy plays.
+         */
+        fun merge(phone: List<Track>, server: List<Track>): List<Track> {
+            if (server.isEmpty()) return phone
+            val have = HashSet<String>()
+            for (t in phone) have += songKeys(t)
+            return phone + server.filter { s -> songKeys(s).none { it in have } }
+        }
+
+        /** A song's identities: by MusicBrainz release when tagged *and* by artist + album title (old rips lack the ID). */
+        private fun songKeys(t: Track): List<String> {
+            if (t.album.isBlank()) return listOf("loose:" + fold(t.filedUnder) + "\u0000" + fold(t.title))
+            val albums = listOfNotNull(
+                t.musicBrainzAlbumId.takeIf { it.isNotBlank() }?.let { "mb:" + it.lowercase(Locale.ROOT) },
+                "tag:" + fold(t.filedUnder) + "\u0000" + fold(t.album),
+            )
+            return albums.flatMap { a ->
+                listOfNotNull(a + "\u0000title:" + fold(t.title), if (t.trackNumber > 0) a + "\u0000#${t.discNumber}.${t.trackNumber}" else null)
+            }
+        }
 
         /** One album = one MusicBrainz release when tagged, else album artist + album title. */
         private fun albumKey(t: Track): String =

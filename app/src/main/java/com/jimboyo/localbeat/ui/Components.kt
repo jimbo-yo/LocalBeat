@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -97,7 +98,10 @@ fun AlbumTile(album: Album, subtitle: String, actions: List<Action>, onOpen: () 
         Column(Modifier.combinedClickable(onClick = onOpen, onLongClick = { menu = true }).padding(6.dp)) {
             AlbumArt(album, Modifier.fillMaxWidth().aspectRatio(1f), maxPx = 600)
             Text(album.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (album.tracks.all { it.onServer }) ServerMark(Modifier.padding(end = 4.dp))
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
         ActionMenu(menu, actions) { menu = false }
     }
@@ -118,10 +122,20 @@ fun TrackRow(
             Text(t.title, color = color, style = MaterialTheme.typography.bodyLarge, fontWeight = if (playing) FontWeight.Bold else null, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
+        if (t.onServer) ServerMark(Modifier.padding(start = 8.dp))
         Text(duration(t.durationMs), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
         MoreButton(actions)
         trailing()
     }
+}
+
+/** Marks music that's on the music server, not on the phone. */
+@Composable
+fun ServerMark(modifier: Modifier = Modifier) {
+    Icon(
+        Icons.Outlined.Cloud, "On the music server",
+        modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

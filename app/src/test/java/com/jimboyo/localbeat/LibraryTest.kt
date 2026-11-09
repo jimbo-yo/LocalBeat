@@ -64,4 +64,42 @@ class LibraryTest {
         assertEquals(zep, M3u.resolve("somewhere/else/01. Good Times.opus", lib)) // unique file name
         assertNull(M3u.resolve("Nope/nothing.opus", lib))
     }
+
+    // ---- the music server's songs merged with the phone's ----
+
+    private fun serverTrack(id: String, title: String, artist: String, album: String, n: Int, mbid: String = "") = track("x", title, artist, album, n = n)
+        .copy(id = "s$id", mediaStoreId = -1, path = "server:$id", serverSongId = id, musicBrainzAlbumId = mbid)
+
+    @Test
+    fun serverSongsAlsoOnThePhoneAppearOnce() {
+        val phone = listOf(
+            track("Oasis/Morning Glory/01. Hello.opus", "Hello", "Oasis", "(What’s the Story) Morning Glory?", n = 1),
+            track("Oasis/Morning Glory/02. Roll With It.opus", "Roll With It", "Oasis", "(What’s the Story) Morning Glory?", n = 2),
+        )
+        val server = listOf(
+            // Straight apostrophe, different case: still the same album and songs.
+            serverTrack("1", "Hello", "oasis", "(What's The Story) Morning Glory?", 1),
+            serverTrack("2", "Roll with It", "Oasis", "(What's the Story) Morning Glory?", 2),
+            serverTrack("3", "Wonderwall", "Oasis", "(What's the Story) Morning Glory?", 3),
+            serverTrack("4", "Thunder Road", "Bruce Springsteen", "Born to Run", 1),
+        )
+        val merged = Library.merge(phone, server)
+        assertEquals(listOf("Hello", "Roll With It", "Wonderwall", "Thunder Road"), merged.map { it.title })
+        // Wonderwall joins the phone's album rather than making a second one.
+        val lib = Library(merged)
+        assertEquals(2, lib.albums.size)
+        val glory = lib.albums.first { it.title.startsWith("(What") }
+        assertEquals(listOf(false, false, true), glory.tracks.map { it.onServer })
+    }
+
+    @Test
+    fun mergeMatchesByMusicBrainzOrByTagsWhenThePhoneCopyLacksTheId() {
+        val phone = listOf(track("Old/01.opus", "Track One", "Artist", "Album", n = 1)) // old rip, no MBID
+        val server = listOf(serverTrack("1", "Track One", "Artist", "Album", 1, mbid = "ABC-123"))
+        assertEquals(1, Library.merge(phone, server).size)
+        // Same disc and track number but a different title (retagged): still the phone's.
+        assertEquals(1, Library.merge(phone, listOf(serverTrack("2", "Track 1 (Remastered)", "Artist", "Album", 1))).size)
+        assertEquals(2, Library.merge(phone, listOf(serverTrack("3", "Other", "Artist", "Other Album", 1))).size)
+        assertEquals(phone, Library.merge(phone, emptyList()))
+    }
 }

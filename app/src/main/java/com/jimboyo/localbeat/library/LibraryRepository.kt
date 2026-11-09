@@ -42,6 +42,10 @@ class LibraryRepository(private val context: Context) {
     private val cacheFile = File(context.filesDir, "library.bin")
     private var started = false
 
+    /** The phone's own songs (null until loaded) and the music server's (Connected edition). */
+    @Volatile private var phoneTracks: List<Track>? = null
+    @Volatile private var serverTracks: List<Track> = emptyList()
+
     private val _library = MutableStateFlow<Library?>(null)
     /** Null until the first load (from the cache, else a scan) finishes. */
     val library: StateFlow<Library?> = _library.asStateFlow()
@@ -69,7 +73,7 @@ class LibraryRepository(private val context: Context) {
         if (started) return
         started = true
         scope.launch {
-            LibraryCache.read(cacheFile)?.let { _library.value = Library(it) }
+            LibraryCache.read(cacheFile)?.let(::publish)
             mutex.withLock {
                 scan()
                 if (hasPermission()) {
@@ -101,13 +105,13 @@ class LibraryRepository(private val context: Context) {
 
     private suspend fun scan() {
         if (!hasPermission()) {
-            if (_library.value == null) _library.value = Library.EMPTY
+            if (phoneTracks == null) publish(emptyList())
             return
         }
         _scanning.value = true
         try {
             val started = System.currentTimeMillis()
-            val known = _library.value?.tracks?.associateBy { it.path }.orEmpty()
+            val known = phoneTracks?.associateBy { it.path }.orEmpty()
             val rows = queryMediaStore()
             val io = Dispatchers.IO.limitedParallelism(4)
             val parsed = java.util.concurrent.atomic.AtomicInteger()
@@ -122,16 +126,31 @@ class LibraryRepository(private val context: Context) {
                     }
                 }
             }.awaitAll()
-            _library.value = Library(tracks)
+            publish(tracks)
             LibraryCache.write(cacheFile, tracks)
             _generation.value++
             Log.i(TAG, "Scan: ${tracks.size} tracks, $parsed read, ${System.currentTimeMillis() - started} ms")
         } catch (e: Exception) {
             Log.e(TAG, "Scan failed", e)
-            if (_library.value == null) _library.value = Library.EMPTY
+            if (phoneTracks == null) publish(emptyList())
         } finally {
             _scanning.value = false
         }
+    }
+
+    /** The music server's catalogue changed (or the server was turned off: empty). */
+    @Synchronized
+    fun setServerTracks(tracks: List<Track>) {
+        if (tracks === serverTracks) return
+        serverTracks = tracks
+        phoneTracks?.let(::publish)
+        _generation.value++
+    }
+
+    @Synchronized
+    private fun publish(phone: List<Track>) {
+        phoneTracks = phone
+        _library.value = Library(Library.merge(phone, serverTracks))
     }
 
     private class Row(val id: Long, val path: String, val modified: Long, val size: Long, val durationMs: Long, val dateAdded: Long)

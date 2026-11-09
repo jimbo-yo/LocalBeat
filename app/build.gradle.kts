@@ -94,6 +94,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     testImplementation("junit:junit:4.13.2")
+    // Android's org.json is a stub in JVM unit tests; the real one for the Subsonic parsing tests.
+    testImplementation("org.json:json:20240303")
 }
 
 // `./gradlew dist`: release APKs of both editions, named after the version, in dist/:

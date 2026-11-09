@@ -8,7 +8,7 @@ import java.io.File
 
 /** The parsed library, saved between launches so startup doesn't re-read every file. */
 object LibraryCache {
-    private const val VERSION = 2 // 2: year prefers ORIGINALDATE; multi-value GENRE
+    private const val VERSION = 3 // 2: year prefers ORIGINALDATE; multi-value GENRE. 3: server songs
 
     fun read(file: File): List<Track>? = runCatching {
         DataInputStream(BufferedInputStream(file.inputStream())).use { input ->
@@ -21,6 +21,7 @@ object LibraryCache {
                     albumArtist = input.str(), album = input.str(), trackNumber = input.readInt(),
                     discNumber = input.readInt(), discTotal = input.readInt(), year = input.readInt(),
                     genre = input.str(), musicBrainzAlbumId = input.str(), hasEmbeddedArt = input.readBoolean(),
+                    serverSongId = input.str(), serverCoverArt = input.str(),
                 )
             }
         }
@@ -38,6 +39,7 @@ object LibraryCache {
                 out.str(t.albumArtist); out.str(t.album); out.writeInt(t.trackNumber)
                 out.writeInt(t.discNumber); out.writeInt(t.discTotal); out.writeInt(t.year)
                 out.str(t.genre); out.str(t.musicBrainzAlbumId); out.writeBoolean(t.hasEmbeddedArt)
+                out.str(t.serverSongId); out.str(t.serverCoverArt)
             }
         }
         tmp.renameTo(file)
