@@ -153,6 +153,12 @@ findings in its CLAUDE.md). The server should also run as a background
 "desktop server" on an existing Linux or Windows computer, not only on a Pi;
 Navidrome runs on both.
 
+Later, our own **Rust** server for the same OpenSubsonic subset. LocalBeat
+supports **both**: it uses only the standard calls both implement, and extras
+only as named OpenSubsonic extensions it finds via `getOpenSubsonicExtensions`
+(with a fallback when a server lacks them). Details: LocalBeatServer's
+CLAUDE.md.
+
 - **Navidrome** on the server (recommended starting point): a lightweight,
   self-hosted music server speaking the Subsonic/OpenSubsonic API; converts
   FLAC to Opus on the fly. LocalBeat becomes a Subsonic client with an offline
