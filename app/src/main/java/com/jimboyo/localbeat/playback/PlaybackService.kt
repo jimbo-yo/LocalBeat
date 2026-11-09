@@ -88,10 +88,21 @@ class PlaybackService : MediaLibraryService() {
             .build()
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                // Say why a server song stopped ("Not on Wi-Fi…"); other errors as before.
+                // Say why a server song stopped; other errors as before.
                 var cause: Throwable? = error
                 while (cause != null && cause !is StreamBlockedException) cause = cause.cause
-                cause?.message?.let { Toast.makeText(this@PlaybackService, it, Toast.LENGTH_LONG).show() }
+                val onServer = player.currentMediaItem?.mediaId?.let(BrowseTree::trackIdOf)
+                    ?.let { app.library.library.value?.track(it) }?.onServer == true
+                val message = cause?.message ?: when {
+                    !onServer -> null
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
+                        "Can't reach the music server. Is WireGuard on, and the address in Settings right?"
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+                        "The music server refused that song."
+                    else -> null
+                }
+                message?.let { Toast.makeText(this@PlaybackService, it, Toast.LENGTH_LONG).show() }
             }
 
             override fun onEvents(player: Player, events: Player.Events) {

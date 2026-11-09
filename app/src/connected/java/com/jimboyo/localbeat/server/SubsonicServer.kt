@@ -53,7 +53,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         if (s.enabled && s.address.isNotBlank()) {
             api = apiFor(s)
             scope.launch {
-                LibraryCache.read(cacheFile)?.let { _tracks.value = it }
+                loadSavedCatalogue()
                 fetch()
             }
         }
@@ -74,10 +74,10 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         if (old != s && old.copy(useMobileData = s.useMobileData) == s && api != null) return
         refreshJob?.cancel()
         if (!s.enabled) {
+            // Hide the server's songs, but keep the saved list for when it's turned back on.
             api = null
             _status.value = ServerStatus.Off
             _tracks.value = emptyList()
-            cacheFile.delete()
             return
         }
         if (s.address.isBlank()) {
@@ -86,7 +86,17 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             return
         }
         api = apiFor(s)
-        refresh()
+        refreshJob = scope.launch {
+            // Show the last known songs straight away, even if the server can't be reached now.
+            if (_tracks.value.isEmpty()) loadSavedCatalogue()
+            fetch()
+        }
+    }
+
+    /** The song list saved after the last successful fetch, if it's from this server and user. */
+    private fun loadSavedCatalogue() {
+        if (prefs.getString("savedFor", null) != serverKey()) return
+        LibraryCache.read(cacheFile)?.let { if (api != null) _tracks.value = it }
     }
 
     override fun refresh() {
@@ -107,6 +117,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             if (api !== a) return // settings changed meanwhile
             _tracks.value = tracks
             LibraryCache.write(cacheFile, tracks)
+            prefs.edit { putString("savedFor", serverKey()) }
             _status.value = ServerStatus.Connected(ping.type, ping.version, tracks.size, extensions)
             Log.i(TAG, "Server: ${ping.type} ${ping.version}, ${albums.size} albums, ${tracks.size} songs, extensions $extensions")
         } catch (e: Exception) {
