@@ -1,5 +1,9 @@
 package com.jimboyo.localbeat.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,7 +34,7 @@ import com.jimboyo.localbeat.library.Library
 import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.playback.BrowseTree
 
-private fun albumActions(ui: Ui, album: Album, withArtist: Boolean = true) =
+internal fun albumActions(ui: Ui, album: Album, withArtist: Boolean = true) =
     queueActions(ui, BrowseTree.ALBUM + album.id) { album.tracks } +
         (if (withArtist) listOf(Action("Go to artist") { ui.open(Screen.ArtistPage(album.artistId)) }) else emptyList())
 
@@ -45,18 +49,30 @@ fun trackActions(ui: Ui, lib: Library, t: Track, extra: List<Action> = emptyList
 
 /** Two big covers per row. */
 @Composable
-fun AlbumGrid(ui: Ui, albums: List<Album>, header: (@Composable () -> Unit)? = null, subtitle: (Album) -> String) {
-    LazyVerticalGrid(GridCells.Fixed(2), contentPadding = listPadding(horizontal = 10)) {
-        if (header != null) item(span = { GridItemSpan(maxLineSpan) }) { header() }
-        items(albums, key = { it.id }) { album ->
-            AlbumTile(album, subtitle(album), albumActions(ui, album)) { ui.open(Screen.AlbumPage(album.id)) }
+fun AlbumGrid(
+    ui: Ui, albums: List<Album>, header: (@Composable () -> Unit)? = null,
+    /** The A–Z strip, for lists sorted by title. */
+    fastScroll: Boolean = false,
+    subtitle: (Album) -> String,
+) {
+    val state = rememberLazyGridState()
+    Box {
+        val padding = if (fastScroll) PaddingValues(start = 10.dp, end = 10.dp + FastScrollWidth, top = 8.dp, bottom = 16.dp) else listPadding(horizontal = 10)
+        LazyVerticalGrid(GridCells.Fixed(2), state = state, contentPadding = padding) {
+            if (header != null) item(span = { GridItemSpan(maxLineSpan) }) { header() }
+            items(albums, key = { it.id }) { album ->
+                AlbumTile(album, subtitle(album), albumActions(ui, album)) { ui.open(Screen.AlbumPage(album.id)) }
+            }
         }
+        if (fastScroll) FastScroll(albums.map { it.title }) { i -> state.scrollToItem(i + if (header != null) 1 else 0) }
     }
 }
 
 @Composable
 fun ArtistList(ui: Ui, lib: Library) {
-    LazyColumn(contentPadding = listPadding()) {
+    val state = rememberLazyListState()
+    Box {
+    LazyColumn(state = state, contentPadding = PaddingValues(end = FastScrollWidth, top = 8.dp, bottom = 16.dp)) {
         items(lib.artists, key = { it.id }) { artist ->
             Row(Modifier.fillMaxWidth().clickable { ui.open(Screen.ArtistPage(artist.id)) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AlbumArt(coverAlbum(artist.albums), Modifier.size(64.dp), maxPx = 200)
@@ -67,6 +83,8 @@ fun ArtistList(ui: Ui, lib: Library) {
                 MoreButton(queueActions(ui, BrowseTree.ARTIST_ALL + artist.id) { artist.tracks })
             }
         }
+    }
+    FastScroll(lib.artists.map { it.name }) { state.scrollToItem(it) }
     }
 }
 
@@ -102,7 +120,9 @@ fun GroupPage(ui: Ui, g: AlbumGroup, mediaId: String) {
 
 @Composable
 fun SongList(ui: Ui, lib: Library) {
-    LazyColumn(contentPadding = listPadding()) {
+    val state = rememberLazyListState()
+    Box {
+    LazyColumn(state = state, contentPadding = PaddingValues(end = FastScrollWidth, top = 8.dp, bottom = 16.dp)) {
         itemsIndexedKeyed(lib.tracks) { i, t ->
             TrackRow(
                 t, playing = ui.player.currentTrackId == t.id,
@@ -111,6 +131,8 @@ fun SongList(ui: Ui, lib: Library) {
                 leading = { Thumb(lib, t) },
             ) { ui.player.play(BrowseTree.inList(BrowseTree.SONGS, i, t.id)) }
         }
+    }
+    FastScroll(lib.tracks.map { it.title }) { state.scrollToItem(it) }
     }
 }
 

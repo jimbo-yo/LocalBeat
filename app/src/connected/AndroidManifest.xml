@@ -3,6 +3,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Is the phone on Wi-Fi or mobile data ("Use mobile data" setting)? -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- The music server is the user's own, reached over WireGuard (already
          encrypted) or the home network, usually by IP address over plain HTTP.

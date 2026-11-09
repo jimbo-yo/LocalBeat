@@ -60,6 +60,16 @@ fun ServerSection(ui: Ui) {
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Use mobile data", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Off: music from the server plays on Wi-Fi only. The album list and covers always load.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(settings.useMobileData, { on -> server.update(settings.copy(useMobileData = on)) })
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = { server.update(settings.copy(address = address, username = username, password = password)) }) { Text("Connect") }
             OutlinedButton(onClick = server::refresh, enabled = status is ServerStatus.Connected || status is ServerStatus.Failed) { Text("Refresh") }

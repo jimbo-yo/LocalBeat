@@ -14,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.net.HttpURLConnection
@@ -35,6 +36,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             address = prefs.getString("address", "").orEmpty(),
             username = prefs.getString("username", "").orEmpty(),
             password = prefs.getString("password", "").orEmpty(),
+            useMobileData = prefs.getBoolean("mobileData", false),
         )
     )
     override val settings: StateFlow<ServerSettings> = _settings.asStateFlow()
@@ -64,8 +66,12 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             putString("address", s.address)
             putString("username", s.username)
             putString("password", s.password)
+            putBoolean("mobileData", s.useMobileData)
         }
+        val old = _settings.value
         _settings.value = s
+        // Only the mobile-data switch changed: no need to reconnect.
+        if (old != s && old.copy(useMobileData = s.useMobileData) == s && api != null) return
         refreshJob?.cancel()
         if (!s.enabled) {
             api = null
@@ -126,6 +132,52 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     override fun streamUri(track: Track): Uri? =
         api?.takeIf { track.onServer }?.let { Uri.parse(it.streamUrl(track.serverSongId)) }
+
+    private val connectivity = app.getSystemService(android.net.ConnectivityManager::class.java)
+
+    override fun streamBlockedReason(): String? {
+        if (_settings.value.useMobileData) return null
+        // "Metered" covers mobile data and metered Wi-Fi (hotspots). Through WireGuard,
+        // the VPN reports its underlying network's status.
+        return if (connectivity.isActiveNetworkMetered)
+            "Not on Wi-Fi. To play from the server on mobile data, turn on “Use mobile data” in Settings → Music server."
+        else null
+    }
+
+    /** Songs fetched whole recently (the server's conversion cache is size-limited, so only the last few). */
+    private val wholeSongs = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+    private var wholeJob: Job? = null
+
+    override fun fetchWhole(track: Track) {
+        val a = api ?: return
+        if (!track.onServer || wholeSongReady(track) || streamBlockedReason() != null) return
+        wholeJob?.cancel()
+        wholeJob = scope.launch {
+            val c = URL(a.streamUrl(track.serverSongId)).openConnection() as HttpURLConnection
+            try {
+                c.connectTimeout = 8_000
+                c.readTimeout = 60_000
+                if (c.responseCode != 200) return@launch
+                val buf = ByteArray(64 * 1024)
+                c.inputStream.use { input ->
+                    while (true) {
+                        if (!isActive) return@launch
+                        if (input.read(buf) < 0) break
+                    }
+                }
+                synchronized(wholeSongs) {
+                    wholeSongs += track.serverSongId
+                    while (wholeSongs.size > 10) wholeSongs.remove(wholeSongs.first())
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Fetching ${track.title}: ${e.message}")
+            } finally {
+                c.disconnect()
+            }
+        }
+    }
+
+    override fun wholeSongReady(track: Track) = track.serverSongId in wholeSongs
 
     override fun coverBytes(track: Track): ByteArray? {
         val a = api ?: return null

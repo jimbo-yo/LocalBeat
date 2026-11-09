@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
@@ -85,6 +86,7 @@ sealed interface Screen {
 /** The bottom navigation bar's destinations. */
 enum class Dest(val label: String, val icon: ImageVector) {
     ALBUMS("Albums", Icons.Default.Album),
+    SEARCH("Search", Icons.Default.Search),
     ARTISTS("Artists", Icons.Default.Person),
     PLAYLISTS("Playlists", Icons.AutoMirrored.Filled.QueueMusic),
     BROWSE("Browse", Icons.Default.Explore),
@@ -107,6 +109,8 @@ class Ui(
     var browseTab by mutableStateOf(BrowseTab.GENRES)
     /** Songs waiting for the "add to playlist" dialog. */
     var addToPlaylist by mutableStateOf<List<Track>?>(null)
+    /** What's typed in the Search tab (kept while browsing results). */
+    var searchQuery by mutableStateOf("")
 
     fun open(s: Screen) {
         if (stack.lastOrNull() != s) stack.add(s)
@@ -169,7 +173,8 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                     top is Screen.DecadePage -> lib.decade(top.id)?.let { GroupPage(ui, it, BrowseTree.DECADE + it.id) }
                     top is Screen.PlaylistPage -> PlaylistPage(ui, lib, top.id)
                     else -> when (ui.dest) {
-                        Dest.ALBUMS -> AlbumGrid(ui, lib.albums) { it.artist }
+                        Dest.ALBUMS -> AlbumGrid(ui, lib.albums, fastScroll = true) { it.artist }
+                        Dest.SEARCH -> SearchScreen(ui, lib)
                         Dest.ARTISTS -> ArtistList(ui, lib)
                         Dest.PLAYLISTS -> PlaylistList(ui, lib)
                         Dest.SETTINGS -> Unit

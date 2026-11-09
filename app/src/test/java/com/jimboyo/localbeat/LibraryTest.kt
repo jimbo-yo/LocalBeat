@@ -102,4 +102,37 @@ class LibraryTest {
         assertEquals(2, Library.merge(phone, listOf(serverTrack("3", "Other", "Artist", "Other Album", 1))).size)
         assertEquals(phone, Library.merge(phone, emptyList()))
     }
+
+    // ---- search and the A–Z strip ----
+
+    @Test
+    fun searchIgnoresCaseQuotesAndAccentsAndMatchesWordsAcrossFields() {
+        val lib = Library(listOf(
+            track("a/1.opus", "Thunder Road", "Bruce Springsteen", "Born to Run", n = 1),
+            track("b/1.opus", "Hello", "Oasis", "(What’s the Story) Morning Glory?", n = 1),
+            track("c/1.opus", "Café del Mar", "Energy 52", "Café del Mar", n = 1),
+            track("d/1.opus", "Road to Nowhere", "Talking Heads", "Little Creatures", n = 1),
+        ))
+        fun songs(q: String) = com.jimboyo.localbeat.library.Search.run(q, lib).tracks.map { it.title }
+        fun albums(q: String) = com.jimboyo.localbeat.library.Search.run(q, lib).albums.map { it.title }
+        assertEquals(listOf("(What’s the Story) Morning Glory?"), albums("whats the story"))
+        assertEquals(listOf("(What’s the Story) Morning Glory?"), albums("WHAT'S"))
+        assertEquals(listOf("Café del Mar"), songs("cafe"))
+        // Starts-with ranks above contains.
+        assertEquals(listOf("Road to Nowhere", "Thunder Road"), songs("road"))
+        // Every word somewhere across title, artist and album.
+        assertEquals(listOf("Thunder Road"), songs("springsteen thunder"))
+        assertEquals(emptyList<String>(), songs("   "))
+    }
+
+    @Test
+    fun indexLettersFollowTheListsSortOrder() {
+        val letter = com.jimboyo.localbeat.library.Search::indexLetter
+        assertEquals('B', letter("The Beatles"))
+        assertEquals('W', letter("(What’s the Story) Morning Glory?"))
+        assertEquals('E', letter("Élan"))
+        assertEquals('#', letter("100% Deep House"))
+        assertEquals('#', letter(""))
+        assertEquals('A', letter("‘Allo ‘Allo"))
+    }
 }

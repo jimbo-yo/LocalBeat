@@ -11,7 +11,12 @@ data class ServerSettings(
     val address: String = "",
     val username: String = "",
     val password: String = "",
+    /** Stream and download music over mobile data too (and metered Wi-Fi such as a hotspot). Off: Wi-Fi only. */
+    val useMobileData: Boolean = false,
 )
+
+/** Thrown when the player asks for a server song that isn't allowed right now (e.g. on mobile data). */
+class StreamBlockedException(message: String) : java.io.IOException(message)
 
 sealed interface ServerStatus {
     data object Off : ServerStatus
@@ -44,6 +49,21 @@ interface MusicServer {
 
     /** Where the player streams a server song from. */
     fun streamUri(track: Track): Uri?
+    /**
+     * Why music can't come from the server right now (on mobile data with it
+     * turned off), or null if it can. Checked as each song starts, so a queue
+     * built on Wi-Fi stops when the phone moves to mobile data.
+     */
+    fun streamBlockedReason(): String?
+
+    /**
+     * Fetches a whole server song in the background as it starts playing, so the
+     * server finishes converting it. Navidrome streams a song it's still
+     * converting without seeking; once converted it serves it with seeking.
+     */
+    fun fetchWhole(track: Track)
+    /** True once [fetchWhole] finished for this song: reloading it now gives a seekable stream. */
+    fun wholeSongReady(track: Track): Boolean
     /** A server song's cover image, or null. Blocking: call off the main thread. */
     fun coverBytes(track: Track): ByteArray?
 }

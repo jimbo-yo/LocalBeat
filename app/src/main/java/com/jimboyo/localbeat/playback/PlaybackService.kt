@@ -9,7 +9,12 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import android.widget.Toast
+import androidx.media3.common.PlaybackException
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -23,6 +28,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.jimboyo.localbeat.LocalBeatApp
 import com.jimboyo.localbeat.library.Library
+import com.jimboyo.localbeat.server.StreamBlockedException
 import com.jimboyo.localbeat.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +70,15 @@ class PlaybackService : MediaLibraryService() {
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .build()
         }
+        // Server songs (Connected edition) are checked as they start: e.g. Wi-Fi only.
+        val dataSources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
+            if (spec.uri.scheme == "http" || spec.uri.scheme == "https") {
+                app.server?.streamBlockedReason()?.let { throw StreamBlockedException(it) }
+            }
+            spec
+        }
         player = ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
             .setAudioAttributes(
                 AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(),
                 /* handleAudioFocus = */ true,
@@ -73,7 +87,19 @@ class PlaybackService : MediaLibraryService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                // Say why a server song stopped ("Not on Wi-Fi…"); other errors as before.
+                var cause: Throwable? = error
+                while (cause != null && cause !is StreamBlockedException) cause = cause.cause
+                cause?.message?.let { Toast.makeText(this@PlaybackService, it, Toast.LENGTH_LONG).show() }
+            }
+
             override fun onEvents(player: Player, events: Player.Events) {
+                // A server song started: fetch it whole, so seeking works in it soon.
+                if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                    val id = player.currentMediaItem?.mediaId?.let(BrowseTree::trackIdOf)
+                    id?.let { app.library.library.value?.track(it) }?.takeIf { it.onServer }?.let { app.server?.fetchWhole(it) }
+                }
                 if (events.containsAny(
                         Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED,
                         Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_POSITION_DISCONTINUITY,
@@ -93,7 +119,10 @@ class PlaybackService : MediaLibraryService() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaLibrarySession.Builder(this, player, Callback())
+        val sessionPlayer = ServerSeekPlayer(player, this, { app.server }) { id ->
+            BrowseTree.trackIdOf(id)?.let { app.library.library.value?.track(it) }
+        }
+        session = MediaLibrarySession.Builder(this, sessionPlayer, Callback())
             .setSessionActivity(openApp)
             .build()
 
