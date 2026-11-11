@@ -17,3 +17,6 @@ dist/
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# Kotlin compiler caches
+.kotlin/
