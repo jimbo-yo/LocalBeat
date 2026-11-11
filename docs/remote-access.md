@@ -30,7 +30,7 @@ played.
   WireGuard, a dynamic-DNS updater, unattended security upgrades. Nothing else.
 - Size guide: 1,000 CDs ~ 350 GB FLAC (an Opus copy of everything would be
   ~70 GB more; not needed, see phase 3).
-- The laptop (ripshelf / rip-cd.sh) pushes new rips to it over the LAN
+- The laptop (LocalBeat Studio, formerly ripshelf / rip-cd.sh) pushes new rips to it over the LAN
   (rsync/SFTP over SSH, key-only login). FLAC is the master copy and the only one
   stored; Opus is made on demand (see phase 3).
 
