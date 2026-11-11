@@ -3,6 +3,7 @@ package com.jimboyo.localbeat.playback
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -19,10 +20,14 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.jimboyo.localbeat.audio.EqualizerProcessor
+import androidx.media3.session.CommandButton
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
+import com.jimboyo.localbeat.R
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -143,6 +148,11 @@ class PlaybackService : MediaLibraryService() {
         app.library.start()
         scope.launch { restoreQueue() }
 
+        // The "On this phone" button follows the switch, wherever it's flipped.
+        if (app.server != null) scope.launch {
+            app.library.onPhoneOnly.drop(1).collect { session?.setMediaButtonPreferences(mediaButtons()) }
+        }
+
         // Let Android Auto refresh its lists when the library or playlists change.
         scope.launch {
             app.library.generation.drop(1).collect { notifyChanged(BrowseTree.ALBUMS, BrowseTree.ARTISTS, BrowseTree.GENRES, BrowseTree.DECADES, BrowseTree.SONGS, BrowseTree.RECENT) }
@@ -161,6 +171,28 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
+
+    // ---- the "On this phone" button (Connected edition) ----
+
+    private val onPhoneCommand = SessionCommand(ON_PHONE_ACTION, Bundle.EMPTY)
+
+    /**
+     * Android Auto's playing screen (and the phone's media controls) get a button for
+     * the "On this phone" switch: a phone while only the phone's music shows, a cloud
+     * while everything does. Tapping it flips the switch.
+     */
+    private fun mediaButtons(): List<CommandButton> {
+        if (app.server == null) return emptyList()
+        val on = app.library.onPhoneOnly.value
+        return listOf(
+            CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+                .setCustomIconResId(if (on) R.drawable.ic_on_phone else R.drawable.ic_all_music)
+                .setDisplayName(if (on) "Showing music on this phone" else "Showing all music")
+                .setSessionCommand(onPhoneCommand)
+                .setSlots(CommandButton.SLOT_OVERFLOW)
+                .build()
+        )
+    }
 
     override fun onDestroy() {
         saveQueue()
@@ -217,6 +249,24 @@ class PlaybackService : MediaLibraryService() {
     // ---- session callback ----
 
     private inner class Callback : MediaLibrarySession.Callback {
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+            if (app.server == null) return super.onConnect(session, controller)
+            val base = if (controller.isTrusted) MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
+            else MediaSession.ConnectionResult.DEFAULT_UNTRUSTED_SESSION_AND_LIBRARY_COMMANDS
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(base.buildUpon().add(onPhoneCommand).build())
+                .setMediaButtonPreferences(mediaButtons())
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle,
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction != ON_PHONE_ACTION) return super.onCustomCommand(session, controller, customCommand, args)
+            app.library.setOnPhoneOnly(!app.library.onPhoneOnly.value)
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, params: LibraryParams?,
         ): ListenableFuture<LibraryResult<MediaItem>> {
@@ -292,6 +342,10 @@ class PlaybackService : MediaLibraryService() {
             val saved = app.queueStore.load() ?: throw UnsupportedOperationException("Nothing to resume")
             savedItems(saved, app.library.awaitLibrary()) ?: throw UnsupportedOperationException("Saved queue is gone")
         }
+    }
+
+    private companion object {
+        const val ON_PHONE_ACTION = "com.jimboyo.localbeat.ON_PHONE"
     }
 
     private fun <T> List<T>.page(page: Int, pageSize: Int): List<T> =

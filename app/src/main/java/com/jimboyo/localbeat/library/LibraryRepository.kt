@@ -113,7 +113,7 @@ class LibraryRepository(private val context: Context) {
         if (_onPhoneOnly.value == on) return
         _onPhoneOnly.value = on
         prefs.edit().putBoolean("onPhoneOnly", on).apply()
-        republish()
+        scope.launch { republish() }
     }
 
     /** The server songs kept on the phone changed. */
