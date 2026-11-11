@@ -132,3 +132,12 @@ Design: **`docs/remote-access.md`**. Server side: its own repo,
 Opus on demand); keep its CLAUDE.md and the design note in step. Decided: two
 editions from the same code. The normal one stays offline; a "Connected"
 edition adds the network and a "Use remote server" checkbox.
+
+## The LocalBeat mark (shared by the suite)
+
+A gold disc (#F2B33D) with a navy (#1B2A3A) eighth note, on navy: the phone
+app's launcher icon (`app/src/main/res/drawable/ic_launcher_foreground.xml`),
+also LocalBeat Studio's app icon and sidebar logo (CDRipPipeline
+`app/gui/assets/localbeat.svg`, `theme::logo`) and LocalBeatServer's.
+`docs/brand/localbeat.svg` is the same mark as an SVG (108-unit space like
+the adaptive icon). Change it in all three repos together.
