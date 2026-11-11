@@ -25,8 +25,18 @@ encodings.
 
 ## The library (contract with CDRipPipeline)
 
-Put on the phone by `~/development/CDRipPipeline/phone-sync.py` (copies of
-`~/Music/phone`, made by `flac2phone.sh`):
+Put on the phone by **ripshelf's phone sync** (`ripshelf sync` / the Phone
+tab; it replaced phone-sync.py on 2026-11-08). It makes Opus at sync time
+from two libraries: `~/Music/FLAC` (verified CD rips) and
+`~/Music/Miscellaneous` (older MP3/AAC/fre:ac copies, re-tagged from
+MusicBrainz by `ripshelf enrich`). A CD rip replaces the old copy.
+
+- **Which albums are CD rips:** `Music/.ripshelf-sync.json` (written by
+  the sync) maps each phone album folder to its source:
+  `{"albums": {"Artist/Album": {"source": "flac:Artist/Album" | "misc:...",
+  "files": {...}}}}`. `flac:` = ripped from CD (verified), `misc:` = older
+  copy. Albums missing from it (loose files, put on by hand) are unknown.
+  Use this to badge/filter albums; don't guess from tags
 
 - `Music/Artist/Album/NN. Artist - Title.opus`; multi-disc albums share one
   folder: `1.07. Artist - Title.opus`. Older fre:ac rips: `Music/Artist -
