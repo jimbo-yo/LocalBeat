@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val mode by app.settings.theme.collectAsStateWithLifecycle()
             val font by app.settings.font.collectAsStateWithLifecycle()
+            val colors by app.settings.colors.collectAsStateWithLifecycle()
             val dark = when (mode) {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
@@ -67,7 +68,7 @@ class MainActivity : ComponentActivity() {
                 val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
                 enableEdgeToEdge(style, style)
             }
-            LocalBeatTheme(mode, font) {
+            LocalBeatTheme(mode, colors, font) {
                 LocalBeatUi(ui, hasPermission, onGrant = ::askPermissions)
             }
         }

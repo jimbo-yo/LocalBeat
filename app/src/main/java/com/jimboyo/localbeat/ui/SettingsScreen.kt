@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jimboyo.localbeat.AppFont
 import com.jimboyo.localbeat.BuildConfig
+import com.jimboyo.localbeat.ColorStyle
 import com.jimboyo.localbeat.ThemeMode
 import com.jimboyo.localbeat.library.Library
 
@@ -34,11 +35,15 @@ fun SettingsScreen(ui: Ui, lib: Library) {
     val settings = ui.app.settings
     val theme by settings.theme.collectAsStateWithLifecycle()
     val font by settings.font.collectAsStateWithLifecycle()
+    val colors by settings.colors.collectAsStateWithLifecycle()
     val scanning by ui.app.library.scanning.collectAsStateWithLifecycle()
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
         Section("Appearance")
         ThemeMode.entries.forEach { m -> Choice(m.label, theme == m) { settings.setTheme(m) } }
+
+        Section("Colours")
+        ColorStyle.entries.forEach { c -> Choice(c.label, colors == c) { settings.setColors(c) } }
 
         Section("Font")
         AppFont.entries.forEach { f ->

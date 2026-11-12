@@ -119,7 +119,10 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
   page
 - Bundled, selectable fonts (Musicolet's font was the main complaint):
   Figtree (default), Inter, Nunito Sans, Atkinson Hyperlegible Next
-- Light / dark / follow-system theme; Material You colours
+- Light / dark / follow-system theme; colours **Prism** (default since 0.9,
+  2026-11-11: the LocalBeat suite look shared with LocalBeat Studio, `ui/Theme.kt`
+  `Prism`, keep in step with CDRipPipeline `app/gui/src/theme.rs`) or Material
+  You from the wallpaper (Settings > Colours)
 - Big cover art (two-column album grid)
 - Queues, playlists (create **and share**: .m3u8 with paths relative to
   Music/), genres and decades; the playing song is marked with animated bars
