@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.filled.Explore
@@ -177,6 +179,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
             // The player controls are always at the top, whatever screen is showing.
             TopControls(ui, all, expanded = top == Screen.NowPlaying)
             if (scanning) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+            ServerBanner(ui)
 
             if (top == Screen.NowPlaying) {
                 NowPlayingBody(ui, all, Modifier.weight(1f).navigationBarsPadding())
@@ -249,12 +252,41 @@ private val ON_PHONE_TABS = setOf(Dest.ALBUMS, Dest.SEARCH, Dest.ARTISTS, Dest.B
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.OnPhoneToggle(ui: Ui) {
     val onPhone by ui.app.library.onPhoneOnly.collectAsStateWithLifecycle()
+    // Not connected: only the phone's music shows anyway, so the switch has nothing to do.
+    val connected by (ui.app.server?.connected ?: return).collectAsStateWithLifecycle()
     NavigationBarItem(
-        selected = onPhone,
+        selected = onPhone || !connected,
+        enabled = connected,
         onClick = { ui.app.library.setOnPhoneOnly(!onPhone) },
         icon = { Icon(if (onPhone) Icons.Filled.PhoneAndroid else Icons.Outlined.PhoneAndroid, if (onPhone) "Showing only music on this phone" else "Show only music on this phone") },
         label = { Text("On phone", style = MaterialTheme.typography.labelMedium, maxLines = 1) },
     )
+}
+
+/**
+ * Under the player controls while the music server is on but not connected: says so,
+ * why, and that only the phone's music is showing; "Try now" checks at once.
+ */
+@Composable
+private fun ServerBanner(ui: Ui) {
+    val server = ui.app.server ?: return
+    val settings by server.settings.collectAsStateWithLifecycle()
+    val connected by server.connected.collectAsStateWithLifecycle()
+    val status by server.status.collectAsStateWithLifecycle()
+    if (!settings.enabled || connected) return
+    val reason = (status as? com.jimboyo.localbeat.server.ServerStatus.Failed)?.message ?: return
+    var checking by remember { mutableStateOf(false) }
+    LaunchedEffect(checking) { if (checking) { delay(6_000); checking = false } }
+    Surface(color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.CloudOff, null)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text("Music server not connected", style = MaterialTheme.typography.titleSmall)
+                Text("$reason. Showing the music on this phone.", style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            TextButton(onClick = { checking = true; server.checkNow() }, enabled = !checking) { Text(if (checking) "Checking…" else "Try now") }
+        }
+    }
 }
 
 /** How downloads to the phone are going, above the lists; nothing when there are none. */

@@ -129,9 +129,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         player.connect()
+        app.server?.setInUse("ui", true)
     }
 
     override fun onStop() {
+        app.server?.setInUse("ui", false)
         player.release()
         super.onStop()
     }

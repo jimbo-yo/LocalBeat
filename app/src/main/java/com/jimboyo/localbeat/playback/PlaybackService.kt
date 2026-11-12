@@ -3,6 +3,8 @@ package com.jimboyo.localbeat.playback
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -101,6 +103,20 @@ class PlaybackService : MediaLibraryService() {
                 while (cause != null && cause !is StreamBlockedException) cause = cause.cause
                 val onServer = player.currentMediaItem?.mediaId?.let(BrowseTree::trackIdOf)
                     ?.let { app.library.library.value?.track(it) }?.onServer == true
+                val networkError = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                if (onServer && (cause != null || networkError)) {
+                    // The server can't be used right now: check the connection, and carry on
+                    // with the next song that's on the phone rather than stopping.
+                    app.server?.reportStreamFailure()
+                    if (skipToPlayable()) {
+                        if (!toldSkipping) {
+                            toldSkipping = true
+                            Toast.makeText(this@PlaybackService, "Music server not connected: playing the songs on this phone", Toast.LENGTH_LONG).show()
+                        }
+                        return
+                    }
+                }
                 val message = cause?.message ?: when {
                     !onServer -> null
                     error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
@@ -125,6 +141,9 @@ class PlaybackService : MediaLibraryService() {
                         Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED, Player.EVENT_REPEAT_MODE_CHANGED,
                     )
                 ) saveQueue()
+                if (events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
+                    app.server?.setInUse("playing", player.playWhenReady)
+                }
                 if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                     saveTicker?.cancel()
                     if (player.isPlaying) saveTicker = scope.launch {
@@ -149,8 +168,21 @@ class PlaybackService : MediaLibraryService() {
         scope.launch { restoreQueue() }
 
         // The "On this phone" button follows the switch, wherever it's flipped.
-        if (app.server != null) scope.launch {
-            app.library.onPhoneOnly.drop(1).collect { session?.setMediaButtonPreferences(mediaButtons()) }
+        app.server?.let { server ->
+            scope.launch {
+                app.library.onPhoneOnly.drop(1).collect { session?.setMediaButtonPreferences(mediaButtons()) }
+            }
+            scope.launch {
+                server.settings.drop(1).collect { session?.setMediaButtonPreferences(mediaButtons()) }
+            }
+            // Connected or not: the button shows it, and a tone says so while music plays.
+            scope.launch {
+                server.connected.drop(1).collect { on ->
+                    session?.setMediaButtonPreferences(mediaButtons())
+                    if (on) toldSkipping = false
+                    if (player.playWhenReady && server.settings.value.connectionSound) chime(on)
+                }
+            }
         }
 
         // Let Android Auto refresh its lists when the library or playlists change.
@@ -182,7 +214,16 @@ class PlaybackService : MediaLibraryService() {
      * while everything does. Tapping it flips the switch.
      */
     private fun mediaButtons(): List<CommandButton> {
-        if (app.server == null) return emptyList()
+        val server = app.server ?: return emptyList()
+        if (server.settings.value.enabled && !server.connected.value) return listOf(
+            // Not connected: a crossed-out cloud. Tapping it tries the server at once.
+            CommandButton.Builder(CommandButton.ICON_UNDEFINED)
+                .setCustomIconResId(R.drawable.ic_cloud_off)
+                .setDisplayName("Music server not connected")
+                .setSessionCommand(onPhoneCommand)
+                .setSlots(CommandButton.SLOT_OVERFLOW)
+                .build()
+        )
         val on = app.library.onPhoneOnly.value
         return listOf(
             CommandButton.Builder(CommandButton.ICON_UNDEFINED)
@@ -194,7 +235,44 @@ class PlaybackService : MediaLibraryService() {
         )
     }
 
+    // ---- when the music server isn't connected ----
+
+    /** Said once per disconnection, not for every skipped song. */
+    private var toldSkipping = false
+
+    /**
+     * Moves to the next song in the queue (in play order, shuffle included) that
+     * plays without the server, and plays it. False if there is none.
+     */
+    private fun skipToPlayable(): Boolean {
+        val lib = app.library.library.value ?: return false
+        val kept = app.server?.offline?.value?.ready.orEmpty()
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return false
+        val repeat = if (player.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else player.repeatMode
+        val start = player.currentMediaItemIndex
+        var i = start
+        while (true) {
+            i = timeline.getNextWindowIndex(i, repeat, player.shuffleModeEnabled)
+            if (i == C.INDEX_UNSET || i == start) return false
+            val track = BrowseTree.trackIdOf(player.getMediaItemAt(i).mediaId)?.let(lib::track) ?: continue
+            if (!track.onServer || track.id in kept) break
+        }
+        player.seekTo(i, 0)
+        player.prepare()
+        player.play()
+        return true
+    }
+
+    /** A short tone over the music: two quick beeps for connected, a low buzz for not connected. */
+    private fun chime(connected: Boolean) {
+        val tone = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 80) }.getOrNull() ?: return
+        tone.startTone(if (connected) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_NACK, 600)
+        scope.launch { delay(1_000); tone.release() }
+    }
+
     override fun onDestroy() {
+        app.server?.setInUse("playing", false)
         saveQueue()
         scope.cancel()
         session?.run {
@@ -263,7 +341,9 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle,
         ): ListenableFuture<SessionResult> {
             if (customCommand.customAction != ON_PHONE_ACTION) return super.onCustomCommand(session, controller, customCommand, args)
-            app.library.setOnPhoneOnly(!app.library.onPhoneOnly.value)
+            val server = app.server
+            if (server != null && server.settings.value.enabled && !server.connected.value) server.checkNow()
+            else app.library.setOnPhoneOnly(!app.library.onPhoneOnly.value)
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 

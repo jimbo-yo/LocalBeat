@@ -56,12 +56,14 @@ class LibraryRepository(private val context: Context) {
     val onPhoneOnly: StateFlow<Boolean> = _onPhoneOnly.asStateFlow()
     /** Server songs kept on the phone (Connected edition). */
     @Volatile private var keptIds: Set<String> = emptySet()
+    /** Whether the music server is connected; while it isn't, only what plays without it is shown. */
+    @Volatile private var serverConnected = false
 
     private val _shown = MutableStateFlow<Library?>(null)
     /**
-     * What the lists (and Android Auto) show: [library], or with [onPhoneOnly] just
-     * what's on the phone. Playback looks songs up in [library], so a server song
-     * already queued still plays.
+     * What the lists (and Android Auto) show: [library], or just what's on the phone
+     * with [onPhoneOnly] or while the music server isn't connected. Playback looks
+     * songs up in [library], so a server song already queued is still known.
      */
     val shown: StateFlow<Library?> = _shown.asStateFlow()
 
@@ -120,7 +122,14 @@ class LibraryRepository(private val context: Context) {
     fun setKept(ids: Set<String>) {
         if (ids == keptIds) return
         keptIds = ids
-        if (_onPhoneOnly.value) republish()
+        if (_onPhoneOnly.value || !serverConnected) republish()
+    }
+
+    /** The music server connected or disconnected. */
+    fun setServerConnected(on: Boolean) {
+        if (on == serverConnected) return
+        serverConnected = on
+        republish()
     }
 
     @Synchronized
@@ -193,7 +202,7 @@ class LibraryRepository(private val context: Context) {
         val all = Library(Library.merge(phone, serverTracks))
         _library.value = all
         _shown.value =
-            if (!_onPhoneOnly.value || all.tracks.none { it.onServer }) all
+            if ((serverConnected && !_onPhoneOnly.value) || all.tracks.none { it.onServer }) all
             else Library(all.tracks.filter { !it.onServer || it.id in keptIds })
     }
 

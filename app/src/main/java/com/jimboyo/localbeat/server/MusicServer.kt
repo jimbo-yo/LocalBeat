@@ -13,6 +13,8 @@ data class ServerSettings(
     val password: String = "",
     /** Stream and download music over mobile data too (and metered Wi-Fi such as a hotspot). Off: Wi-Fi only. */
     val useMobileData: Boolean = false,
+    /** A short tone when the server connects or disconnects while music is playing. */
+    val connectionSound: Boolean = true,
 )
 
 /** Thrown when the player asks for a server song that isn't allowed right now (e.g. on mobile data). */
@@ -61,6 +63,25 @@ interface MusicServer {
     val status: StateFlow<ServerStatus>
     /** The server's catalogue as tracks; empty while off. Kept between launches. */
     val tracks: StateFlow<List<Track>>
+    /**
+     * Whether server songs can play right now: the server is on, answering, and
+     * allowed (not on mobile data with that turned off). While false, the lists
+     * show only what's on the phone and server songs in the queue are skipped.
+     * Drops at once on a failure; comes back only once the server has answered
+     * steadily for a while (see [ConnectionGate]), so patchy coverage doesn't
+     * flip it in and out.
+     */
+    val connected: StateFlow<Boolean>
+
+    /**
+     * The connection is only watched while something needs it: the app on screen
+     * ("ui") or music set to play ("playing"). An idle phone sends nothing.
+     */
+    fun setInUse(key: String, inUse: Boolean)
+    /** "Try now": check the server at once and connect without waiting if it answers. */
+    fun checkNow()
+    /** A server song failed to load or stopped mid-stream: check the connection now. */
+    fun reportStreamFailure()
 
     /** Saves the settings and (re)connects, or turns the server off. */
     fun update(settings: ServerSettings)

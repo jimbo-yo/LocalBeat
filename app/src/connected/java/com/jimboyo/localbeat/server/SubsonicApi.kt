@@ -62,6 +62,20 @@ internal class SubsonicApi(
         }
     }
 
+    /** A quick "are you there?" for watching the connection: short timeouts, true if the server answered OK. */
+    fun quickPing(): Boolean {
+        val c = open(URL(url("ping")))
+        return try {
+            c.connectTimeout = 5_000
+            c.readTimeout = 5_000
+            c.responseCode == 200 && parseResponse(c.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }).let { true }
+        } catch (e: Exception) {
+            false
+        } finally {
+            c.disconnect()
+        }
+    }
+
     fun ping(): Ping {
         val r = call("ping")
         return Ping(r.optString("type", "subsonic"), r.optString("serverVersion", r.optString("version")), r.optBoolean("openSubsonic"))

@@ -65,11 +65,22 @@ fun ServerSection(ui: Ui) {
             Column(Modifier.weight(1f)) {
                 Text("Use mobile data", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "Off: music from the server plays on Wi-Fi only. The album list and covers always load.",
+                    "Off: on mobile data the server counts as not connected, and only the music on this phone shows and plays.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Switch(settings.useMobileData, { on -> server.update(settings.copy(useMobileData = on)) })
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Sound when the connection changes", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "A short tone over the music when the server disconnects (low) or reconnects (two beeps). " +
+                        "It reconnects only after answering steadily for 2 minutes, so patchy coverage doesn't flip it back and forth.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(settings.connectionSound, { on -> server.update(settings.copy(connectionSound = on)) })
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(onClick = { server.update(settings.copy(address = address, username = username, password = password)) }) { Text("Connect") }

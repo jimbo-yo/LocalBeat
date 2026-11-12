@@ -2,6 +2,7 @@ package com.jimboyo.localbeat.server
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.edit
 import com.jimboyo.localbeat.LocalBeatApp
@@ -11,6 +12,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +48,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             username = prefs.getString("username", "").orEmpty(),
             password = prefs.getString("password", "").orEmpty(),
             useMobileData = prefs.getBoolean("mobileData", false),
+            connectionSound = prefs.getBoolean("connectionSound", true),
         )
     )
     override val settings: StateFlow<ServerSettings> = _settings.asStateFlow()
@@ -54,6 +59,19 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     @Volatile private var api: SubsonicApi? = null
     private var refreshJob: Job? = null
+
+    // ---- the connection: connected or not, with a steadiness rule ----
+    private val gate = ConnectionGate(STEADY_MS)
+    private val _connected = MutableStateFlow(false)
+    override val connected: StateFlow<Boolean> = _connected.asStateFlow()
+    /** The last successful connection's details, shown again on reconnecting. */
+    @Volatile private var lastConnected: ServerStatus.Connected? = null
+    /** Whether the catalogue has been fetched from this server since it was set up. */
+    @Volatile private var fetched = false
+    private val inUse = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** Wakes the watcher early (network changed, a stream failed, came into use). */
+    private val kick = Channel<Unit>(Channel.CONFLATED)
+    private var watchJob: Job? = null
 
     // Pinned songs: files named by track ID in filesDir/offline (".part" while downloading).
     private val offlineDir = File(app.filesDir, "offline").apply { mkdirs() }
@@ -71,6 +89,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         val s = _settings.value
         if (s.enabled && s.address.isNotBlank()) {
             api = apiFor(s)
+            updateWatch()
             scope.launch {
                 loadSavedCatalogue()
                 fetch()
@@ -81,8 +100,9 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
         // Downloads waiting for Wi-Fi (or for the server) carry on when the network changes.
         connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) = resumeDownloads()
-            override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) = resumeDownloads()
+            override fun onAvailable(network: android.net.Network) { kick.trySend(Unit); resumeDownloads() }
+            override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) { kick.trySend(Unit); resumeDownloads() }
+            override fun onLost(network: android.net.Network) { kick.trySend(Unit) }
         })
     }
 
@@ -98,20 +118,27 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             putString("username", s.username)
             putString("password", s.password)
             putBoolean("mobileData", s.useMobileData)
+            putBoolean("connectionSound", s.connectionSound)
         }
         val old = _settings.value
         _settings.value = s
-        // Only the mobile-data switch changed: no need to reconnect.
-        if (old != s && old.copy(useMobileData = s.useMobileData) == s && api != null) {
+        // Only the mobile-data or sound switch changed: no need to reconnect.
+        if (old != s && old.copy(useMobileData = s.useMobileData, connectionSound = s.connectionSound) == s && api != null) {
+            kick.trySend(Unit)
             startDownloads()
             return
         }
         refreshJob?.cancel()
+        gate.reset()
+        fetched = false
+        lastConnected = null
+        _connected.value = false
         if (!s.enabled) {
             // Hide the server's songs, except the ones kept on the phone; keep the saved
             // list for when it's turned back on.
             api = null
             _status.value = ServerStatus.Off
+            updateWatch()
             refreshJob = scope.launch { _tracks.value = pinnedOnly() }
             return
         }
@@ -121,6 +148,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             return
         }
         api = apiFor(s)
+        updateWatch()
         refreshJob = scope.launch {
             // Show the last known songs straight away, even if the server can't be reached now.
             if (_tracks.value.isEmpty()) loadSavedCatalogue()
@@ -161,12 +189,25 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             _tracks.value = tracks
             LibraryCache.write(cacheFile, tracks)
             prefs.edit { putString("savedFor", serverKey()) }
-            _status.value = ServerStatus.Connected(ping.type, ping.version, tracks.size, extensions)
+            val connectedStatus = ServerStatus.Connected(ping.type, ping.version, tracks.size, extensions)
+            lastConnected = connectedStatus
+            fetched = true
+            _status.value = connectedStatus
+            // A fresh, complete fetch: connected now (unless music can't come from it on this network).
+            if (meteredBlock() == null) {
+                gate.connectNow()
+                _connected.value = true
+            } else {
+                gate.onFailure(SystemClock.elapsedRealtime())
+                setConnected(false)
+            }
             startDownloads()
             Log.i(TAG, "Server: ${ping.type} ${ping.version}, ${albums.size} albums, ${tracks.size} songs, extensions $extensions")
         } catch (e: Exception) {
             if (api !== a) return
             Log.w(TAG, "Server: ${e.message}")
+            gate.onFailure(SystemClock.elapsedRealtime())
+            _connected.value = false
             _status.value = ServerStatus.Failed(
                 when {
                     e is SubsonicApi.SubsonicException && (e.code == 40 || e.code == 41) -> "Wrong username or password"
@@ -257,7 +298,8 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             val todo = st.pinned.filter { it !in st.ready }
             if (todo.isEmpty()) return setWaiting(null)
             val a = api ?: return setWaiting("Turn the music server on to download ${plural(todo.size)}")
-            if (streamBlockedReason() != null) return setWaiting("Waiting for Wi-Fi to download ${plural(todo.size)}")
+            if (meteredBlock() != null) return setWaiting("Waiting for Wi-Fi to download ${plural(todo.size)}")
+            if (!_connected.value) return setWaiting("Waiting for the music server to download ${plural(todo.size)}")
             val byId = _tracks.value.associateBy { it.id }
             // Not in the server's list (yet, or any more): nothing to fetch for now.
             val track = todo.firstNotNullOfOrNull(byId::get) ?: return setWaiting(null)
@@ -319,12 +361,106 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     private fun plural(n: Int) = if (n == 1) "1 song" else "$n songs"
 
     override fun streamBlockedReason(): String? {
+        meteredBlock()?.let { return it }
+        // Known to be disconnected (not just still connecting at start-up).
+        if (api != null && !_connected.value && _status.value !is ServerStatus.Connecting) return "The music server isn't connected."
+        return null
+    }
+
+    /** Why the server can't be used on this network (mobile data with that turned off), or null. */
+    private fun meteredBlock(): String? {
         if (_settings.value.useMobileData) return null
         // "Metered" covers mobile data and metered Wi-Fi (hotspots). Through WireGuard,
         // the VPN reports its underlying network's status.
         return if (connectivity.isActiveNetworkMetered)
             "Not on Wi-Fi. To play from the server on mobile data, turn on “Use mobile data” in Settings → Music server."
         else null
+    }
+
+    // ---- watching the connection ----
+
+    override fun setInUse(key: String, inUse: Boolean) {
+        val changed = if (inUse) this.inUse.add(key) else this.inUse.remove(key)
+        if (changed) updateWatch()
+    }
+
+    override fun checkNow() {
+        scope.launch {
+            val a = api ?: return@launch
+            if (probe(a)) {
+                gate.connectNow()
+                if (!fetched) fetch() else setConnected(true)
+            } else {
+                gate.onFailure(SystemClock.elapsedRealtime())
+                setConnected(false)
+            }
+        }
+    }
+
+    override fun reportStreamFailure() {
+        kick.trySend(Unit)
+    }
+
+    /** Runs the watcher while the server is on and something needs it; stops it otherwise. */
+    @Synchronized
+    private fun updateWatch() {
+        val run = api != null && inUse.isNotEmpty()
+        if (!run) {
+            watchJob?.cancel()
+            watchJob = null
+            return
+        }
+        if (watchJob?.isActive == true) kick.trySend(Unit)
+        else watchJob = scope.launch { watch() }
+    }
+
+    /**
+     * Connected: ask every 30 s; two failed answers 5 s apart disconnect.
+     * Not connected: ask every 15 s; reconnect once the server has answered
+     * steadily for [STEADY_MS]. Network changes and stream failures ask at once.
+     */
+    private suspend fun watch() {
+        kick.tryReceive() // a fresh start asks straight away anyway
+        while (true) {
+            val a = api ?: return
+            if (_status.value !is ServerStatus.Connecting) {
+                val ok = probe(a)
+                if (api !== a) continue
+                if (ok) {
+                    if (!_connected.value && gate.onSuccess(SystemClock.elapsedRealtime())) {
+                        if (!fetched) fetch() else setConnected(true)
+                    }
+                } else if (_connected.value) {
+                    // One lost answer isn't enough: ask again shortly.
+                    delay(RECHECK_MS)
+                    if (api === a && !probe(a)) {
+                        gate.onFailure(SystemClock.elapsedRealtime())
+                        setConnected(false)
+                    }
+                } else {
+                    gate.onFailure(SystemClock.elapsedRealtime())
+                }
+            }
+            withTimeoutOrNull(if (_connected.value) CONNECTED_EVERY_MS else DISCONNECTED_EVERY_MS) { kick.receive() }
+        }
+    }
+
+    /** Is the server usable right now? No network call when the network itself rules it out. */
+    private fun probe(a: SubsonicApi): Boolean = meteredBlock() == null && a.quickPing()
+
+    private fun setConnected(on: Boolean) {
+        if (on) {
+            lastConnected?.let { _status.value = it }
+            _connected.value = true
+            startDownloads()
+        } else {
+            _connected.value = false
+            _status.value = ServerStatus.Failed(
+                if (meteredBlock() != null) "Not on Wi-Fi, and “Use mobile data” is off"
+                else "Can't reach the music server"
+            )
+        }
+        Log.i(TAG, "Server: ${if (on) "connected" else "not connected"}")
     }
 
     /** Songs fetched whole recently (the server's conversion cache is size-limited, so only the last few). */
@@ -386,5 +522,10 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     private companion object {
         const val TAG = "LocalBeat"
+        /** How long the server must answer without a failure before reconnecting. */
+        const val STEADY_MS = 120_000L
+        const val CONNECTED_EVERY_MS = 30_000L
+        const val DISCONNECTED_EVERY_MS = 15_000L
+        const val RECHECK_MS = 5_000L
     }
 }
