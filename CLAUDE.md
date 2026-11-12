@@ -136,6 +136,31 @@ Opus on demand); keep its CLAUDE.md and the design note in step. Decided: two
 editions from the same code. The normal one stays offline; a "Connected"
 edition adds the network and a "Use remote server" checkbox.
 
+## Control from a computer and AI (planned 2026-11-12, nothing built)
+
+Design and plan: **`docs/control.md`** (read it first; start a fresh session
+for it). In short:
+
+- `localbeat player …` (in LocalBeat Studio's `localbeat` CLI, CDRipPipeline
+  `app/cli`, recommended) drives the app over **adb** through a content
+  provider that refuses every caller but the shell user: real-time control,
+  library, search, queue, playlists, `watch`. JSON out, versioned contract.
+  Both editions; no sockets, so the offline edition stays offline
+- `localbeat mcp` on top (stdio), so an AI can use it as tools ("play me
+  some great driving songs"): the AI's own knowledge picks the songs, and a
+  `match` command says which ones are in the library
+- **Seven steps**, each working on its own: 1 contract
+  (`docs/control-api.md`), 2 control channel on the phone (prove playback
+  can start while the app is closed first), 3 the laptop CLI, 4 library,
+  search, `match` and queue, 5 playlists, 6 `watch`, 7 `localbeat mcp`
+- **Metadata after that:** play history on the phone (counts, last played,
+  skips), then tempo/energy measured offline on the laptop (e.g. Essentia),
+  then lyrics from LRCLIB fetched by Studio into `.lrc` files. Rule: the
+  laptop fetches or measures and writes tags/files; the phone only reads
+- **Open:** asking from the phone without the laptop (phone AI apps only
+  use internet-reachable MCP servers, which clashes with the WireGuard-only
+  plan): decide after the laptop version works
+
 ## The LocalBeat mark (shared by the suite)
 
 A gold disc (#F2B33D) with a navy (#1B2A3A) eighth note, on navy: the phone
