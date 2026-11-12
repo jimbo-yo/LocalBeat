@@ -163,10 +163,10 @@ fun PlayButtons(onPlay: () -> Unit, onShuffle: () -> Unit, more: List<Action> = 
     val here = player != null && current != null && tracks.any { it.id == current }
     val pause = here && player?.isPlaying == true
     Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { if (here) player?.togglePlay() else onPlay() }) {
+        PrismPill(onClick = { if (here) player?.togglePlay() else onPlay() }) {
             Icon(if (pause) Icons.Default.Pause else Icons.Default.PlayArrow, null)
             Spacer(Modifier.width(6.dp))
-            Text(if (pause) "Pause" else "Play")
+            Text(if (pause) "Pause" else "Play", style = MaterialTheme.typography.labelLarge)
         }
         FilledTonalButton(onClick = onShuffle) { Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(6.dp)); Text("Shuffle") }
         Spacer(Modifier.weight(1f))

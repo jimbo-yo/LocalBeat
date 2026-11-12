@@ -73,6 +73,13 @@ fun SettingsScreen(ui: Ui, lib: Library) {
         }
 
         Section("About")
+        androidx.compose.foundation.layout.Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            LocalBeatMark(40.dp)
+            Column(Modifier.padding(start = 14.dp)) {
+                Text("LocalBeat ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
+                Text("With LocalBeat Studio (desktop) and LocalBeatServer", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         Text(
             "LocalBeat ${BuildConfig.VERSION_NAME}. Plays music stored on this phone. " +
                 (if (BuildConfig.CONNECTED) "Connected edition: it can also use network features that talk only to " +

@@ -49,6 +49,8 @@ fun PlayingBars(modifier: Modifier = Modifier, color: Color = MaterialTheme.colo
         )
     }
     val still = floatArrayOf(0.45f, 0.75f, 0.35f, 0.6f)
+    // Prism: each bar a step along the gradient.
+    val prism = LocalPrism.current && color == MaterialTheme.colorScheme.primary
     Canvas(modifier.size(size)) {
         val n = heights.size
         val gap = this.size.width / (n * 3f)
@@ -56,7 +58,7 @@ fun PlayingBars(modifier: Modifier = Modifier, color: Color = MaterialTheme.colo
         for (i in 0 until n) {
             val h = this.size.height * (if (playing) heights[i].value else still[i])
             drawRoundRect(
-                color, topLeft = Offset(i * (barW + gap), this.size.height - h), size = Size(barW, h),
+                if (prism) prismAt(0.1f + 0.25f * i) else color, topLeft = Offset(i * (barW + gap), this.size.height - h), size = Size(barW, h),
                 cornerRadius = CornerRadius(barW / 2, barW / 2),
             )
         }

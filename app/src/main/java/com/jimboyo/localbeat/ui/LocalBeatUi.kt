@@ -304,16 +304,14 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
                     }
                 }
                 IconButton(onClick = { p.previous() }, enabled = track != null) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(30.dp)) }
-                FilledIconButton(onClick = p::togglePlay, enabled = track != null, modifier = Modifier.size(52.dp)) {
-                    Icon(if (p.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/pause", Modifier.size(32.dp))
-                }
+                PlayPauseButton(p.isPlaying, p::togglePlay, size = 50.dp, iconSize = 30.dp, enabled = track != null)
                 IconButton(onClick = { p.next() }, enabled = track != null) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(30.dp)) }
                 IconButton(onClick = { ui.open(Screen.Settings) }, Modifier.size(40.dp)) {
                     Icon(Icons.Default.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Progress(p) { pos, dur ->
-                LinearProgressIndicator(progress = { if (dur > 0) pos.toFloat() / dur else 0f }, modifier = Modifier.fillMaxWidth().height(3.dp), gapSize = 0.dp, drawStopIndicator = {})
+                PrismProgress(if (dur > 0) pos.toFloat() / dur else 0f)
             }
         } else Column(Modifier.padding(start = 4.dp, end = 16.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -335,9 +333,7 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     Toggle(Icons.Default.Shuffle, "Shuffle", p.shuffle, p::toggleShuffle)
                     IconButton(onClick = { p.previous() }, Modifier.size(60.dp)) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(40.dp)) }
-                    FilledIconButton(onClick = p::togglePlay, Modifier.size(76.dp)) {
-                        Icon(if (p.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/pause", Modifier.size(44.dp))
-                    }
+                    PlayPauseButton(p.isPlaying, p::togglePlay, size = 76.dp, iconSize = 44.dp)
                     IconButton(onClick = { p.next() }, Modifier.size(60.dp)) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(40.dp)) }
                     Toggle(
                         if (p.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat, "Repeat",
@@ -354,7 +350,7 @@ private fun SeekBar(p: PlayerConnection, pos: Long, dur: Long) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
     Column {
-        Slider(
+        PrismSeekSlider(
             value = if (dragging) dragValue else if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f,
             onValueChange = { dragging = true; dragValue = it },
             onValueChangeFinished = { p.seekTo((dragValue * dur).toLong()); dragging = false },

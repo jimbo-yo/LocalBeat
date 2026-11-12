@@ -136,5 +136,7 @@ fun LocalBeatTheme(mode: ThemeMode, style: ColorStyle, font: AppFont, content: @
         ColorStyle.WALLPAPER -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     }
     val type = remember(font) { typography(fontFamily(font)) }
-    MaterialTheme(colorScheme = colors, typography = type, content = content)
+    androidx.compose.runtime.CompositionLocalProvider(LocalPrism provides (style == ColorStyle.PRISM)) {
+        MaterialTheme(colorScheme = colors, typography = type, content = content)
+    }
 }
