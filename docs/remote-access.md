@@ -20,6 +20,10 @@ played.
 
 ### 1. Home server holding the library
 
+- **Update (2026-11-11):** the server is now the user's **2012 Mac Mini**
+  (Intel, 1 TB SSD) running **Fedora Server**, the same release as the
+  laptop, which runs the same service for development. The Pi notes below
+  are kept as background.
 - Hardware: Raspberry Pi 5 or an old mini PC + a large USB disk. The user
   has a spare **Raspberry Pi 4**: enough for testing and very likely for up
   to ~10 users (2026-11-08 estimate; measure Opus encode speed on it first).
