@@ -59,6 +59,8 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -117,18 +119,33 @@ class Ui(
     var searchQuery by mutableStateOf("")
     /** Music-server songs kept on the phone, and downloads (Connected edition). */
     var offline by mutableStateOf(OfflineState())
+    /**
+     * Each list's saved state (scroll position…), so coming back to a list
+     * returns to where it was rather than the top. Set by [LocalBeatUi].
+     */
+    var savedStates: SaveableStateHolder? = null
+
+    /** The saved-state key of the page at [i] in [stack]. */
+    fun pageKey(i: Int) = "page$i:${stack[i]}"
+
+    /** The saved-state key of the current main list. */
+    fun listKey() = if (dest == Dest.BROWSE) "list:$dest:$browseTab" else "list:$dest"
 
     fun open(s: Screen) {
         if (stack.lastOrNull() != s) stack.add(s)
     }
 
     fun back() {
-        if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex)
-        else if (dest != Dest.ALBUMS) dest = Dest.ALBUMS
+        if (stack.isNotEmpty()) {
+            // A page closed is gone: opening it again starts at the top.
+            savedStates?.removeState(pageKey(stack.lastIndex))
+            stack.removeAt(stack.lastIndex)
+        } else if (dest != Dest.ALBUMS) dest = Dest.ALBUMS
     }
 
     /** Bottom bar tap: that destination's main list (tapping it again also comes back to it). */
     fun go(d: Dest) {
+        stack.indices.forEach { savedStates?.removeState(pageKey(it)) }
         stack.clear()
         dest = d
     }
@@ -148,6 +165,8 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
     val all = library ?: Library.EMPTY
     val lib = shown ?: all
     val top = ui.stack.lastOrNull()
+    val savedStates = rememberSaveableStateHolder()
+    ui.savedStates = savedStates
 
     LaunchedEffect(Unit) { ui.app.server?.offline?.collect { ui.offline = it } }
     BackHandler(enabled = ui.stack.isNotEmpty() || ui.dest != Dest.ALBUMS) { ui.back() }
@@ -175,7 +194,8 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+            val stateKey = if (top != null) ui.pageKey(ui.stack.lastIndex) else ui.listKey()
+            Box(Modifier.weight(1f).fillMaxWidth()) { savedStates.SaveableStateProvider(stateKey) {
                 when {
                     top == Screen.Settings -> SettingsScreen(ui, all)
                     top == Screen.Equalizer -> EqualizerScreen(ui)
@@ -200,7 +220,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                         }
                     }
                 }
-            }
+            } }
             NavigationBar {
                 Dest.entries.forEach { d ->
                     NavigationBarItem(
