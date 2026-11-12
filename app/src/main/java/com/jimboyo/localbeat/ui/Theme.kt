@@ -88,7 +88,9 @@ object Prism {
         tertiaryContainer = Color(0xFF4A1D35), onTertiaryContainer = Color(0xFFFFD8E8),
         background = Color(0xFF10121C), onBackground = Color(0xFFECEEF7),
         surface = Color(0xFF10121C), onSurface = Color(0xFFECEEF7),
-        surfaceVariant = Color(0xFF1F2335), onSurfaceVariant = Color(0xFF9AA0B8),
+        // Not exactly surfaceContainerHigh: Material picks a panel's text colour by
+        // matching its colour, and surfaceVariant (muted text) would win.
+        surfaceVariant = Color(0xFF22263A), onSurfaceVariant = Color(0xFF9AA0B8),
         surfaceContainerLowest = Color(0xFF0B0C14), surfaceContainerLow = Color(0xFF141624),
         surfaceContainer = Color(0xFF171A28), surfaceContainerHigh = Color(0xFF1F2335),
         surfaceContainerHighest = Color(0xFF262B40),
