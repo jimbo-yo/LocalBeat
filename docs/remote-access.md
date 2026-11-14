@@ -278,14 +278,12 @@ Two separate steps, two QR codes. The Pi stays headless: no monitor, no X.
 - LocalBeat controls the cache's eviction itself (pins, size limit, least
   recently played), not Media3's default.
 
+**Working (2026-11-13):** LocalBeat reaches the Mac through WireGuard at
+`http://10.8.0.1:4533` from mobile data *and* from home Wi-Fi (the ASUS
+router loops its public address back inside), so one server address is
+enough, with the tunnel on (Always-on VPN, LocalBeat only).
+
 **Still to decide**
-- **Two server addresses** (found 2026-11-13, WireGuard working from mobile
-  data): at home the tunnel can't be used (the ASUS router doesn't loop its
-  public address back inside), so LocalBeat needs the home address
-  (`http://192.168.1.10:4533`) on home Wi-Fi and the tunnel address
-  (`http://10.8.0.1:4533`) elsewhere. Suggested: LocalBeat keeps both and
-  tries home first, tunnel as fallback; later the home one comes from LAN
-  discovery (mDNS).
 - Download over mobile data, or Wi-Fi only (FLAC on mobile data is expensive).
 - What Android Auto shows: everything, or only what's on the phone.
 
