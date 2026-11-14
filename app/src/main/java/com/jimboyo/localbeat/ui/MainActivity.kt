@@ -13,6 +13,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +32,8 @@ import androidx.lifecycle.lifecycleScope
 import com.jimboyo.localbeat.LocalBeatApp
 import com.jimboyo.localbeat.ThemeMode
 import com.jimboyo.localbeat.playlists.Playlist
+import com.jimboyo.localbeat.server.ConnectLink
+import com.jimboyo.localbeat.server.ServerSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +43,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var player: PlayerConnection
     private lateinit var ui: Ui
     private var hasPermission by mutableStateOf(false)
+    /** A `localbeat://connect` link waiting for the user to confirm it. */
+    private var connectOffer by mutableStateOf<ConnectLink?>(null)
 
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if (result[Manifest.permission.READ_MEDIA_AUDIO] == true) {
@@ -70,6 +82,9 @@ class MainActivity : ComponentActivity() {
             }
             LocalBeatTheme(mode, colors, font) {
                 LocalBeatUi(ui, hasPermission, onGrant = ::askPermissions)
+                connectOffer?.let { link ->
+                    ConnectDialog(link, app.server?.settings?.value, onUse = { useServer(link) }, onDismiss = { connectOffer = null })
+                }
             }
         }
     }
@@ -79,14 +94,33 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** A playlist file opened or shared from another app (Files, KDE Connect…). */
+    /**
+     * A music server link (`localbeat://connect`, the camera opening the server's
+     * QR code; declared by the Connected edition only), or a playlist file opened
+     * or shared from another app (Files, KDE Connect…).
+     */
     private fun handleIntent(intent: Intent?) {
+        val data = intent?.data
+        if (intent?.action == Intent.ACTION_VIEW && data?.scheme.equals("localbeat", ignoreCase = true)) {
+            if (app.server == null) return // the offline edition: no server
+            val link = ConnectLink.parse(data.toString())
+            if (link == null) ui.toast("That isn't a valid LocalBeat server link") else connectOffer = link
+            return
+        }
         val uri = when (intent?.action) {
             Intent.ACTION_VIEW -> intent.data
             Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             else -> null
         } ?: return
         importPlaylist(uri)
+    }
+
+    /** Confirmed: the link's server, user and secret, and the server turned on. */
+    private fun useServer(link: ConnectLink) {
+        connectOffer = null
+        val server = app.server ?: return
+        server.update(server.settings.value.copy(enabled = true, address = link.address, username = link.username, password = link.password))
+        ui.toast("Music server set: ${link.username} at ${link.address}")
     }
 
     private fun importPlaylist(uri: Uri) {
@@ -137,4 +171,30 @@ class MainActivity : ComponentActivity() {
         player.release()
         super.onStop()
     }
+}
+
+/** Asks before a link changes the music server settings (a stray link must not). */
+@Composable
+private fun ConnectDialog(link: ConnectLink, current: ServerSettings?, onUse: () -> Unit, onDismiss: () -> Unit) {
+    val replacing = current != null && current.address.isNotBlank() &&
+        (current.address.trimEnd('/') != link.address || current.username != link.username)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Use this music server?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Address: ${link.address}\nUser: ${link.username}")
+                if (replacing) {
+                    Text(
+                        "Replaces ${current!!.username.ifBlank { "the login" }} at ${current.address}. Songs kept on this " +
+                            "phone from the old server or user are tied to it and won't be used.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text("Only use codes from your own server's setup page.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(onClick = onUse) { Text("Use it") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

@@ -128,13 +128,22 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
   Music/), genres and decades; the playing song is marked with animated bars
 - Lyrics maybe later, only from the files (embedded or .lrc)
 
-## Remote access (planned, nothing built)
+## Remote access
 
 Design: **`docs/remote-access.md`**. Server side: its own repo,
 **`~/development/LocalBeatServer`** (Raspberry Pi: FLAC library, WireGuard,
 Opus on demand); keep its CLAUDE.md and the design note in step. Decided: two
 editions from the same code. The normal one stays offline; a "Connected"
 edition adds the network and a "Use remote server" checkbox.
+
+- **Server links** (0.9.5, 2026-11-13): the Connected edition opens
+  `localbeat://connect?server=…&user=…&secret=…` (LocalBeatServer's second QR
+  code, read by the phone's camera; no scanner, no camera permission). The
+  intent filter is in `src/connected/AndroidManifest.xml` only; parsing in
+  `server/ConnectLink.kt` (http/https address with nothing after host:port,
+  user, secret; tested in `ConnectLinkTest`); `MainActivity` asks "Use this
+  music server?" before changing Settings, and warns that songs kept on the
+  phone are tied to the old address + user (track IDs hash both)
 
 ## Control from a computer and AI (planned 2026-11-12, nothing built)
 

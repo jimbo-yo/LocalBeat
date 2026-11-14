@@ -9,5 +9,18 @@
     <!-- The music server is the user's own, reached over WireGuard (already
          encrypted) or the home network, usually by IP address over plain HTTP.
          LocalBeat only ever connects to the address set in Settings. -->
-    <application android:usesCleartextTraffic="true" />
+    <application android:usesCleartextTraffic="true">
+        <!-- Music server links (localbeat://connect?server=…&user=…&secret=…):
+             the second QR code from LocalBeatServer's setup page or
+             localbeat-people, opened by the phone's camera. LocalBeat asks
+             before using them. The offline edition doesn't declare this. -->
+        <activity android:name="com.jimboyo.localbeat.ui.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="localbeat" android:host="connect" />
+            </intent-filter>
+        </activity>
+    </application>
 </manifest>
