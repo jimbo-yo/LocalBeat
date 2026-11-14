@@ -90,7 +90,8 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
 - Android Studio at `/opt/android-studio`; SDK `~/Android/Sdk` (platforms
   35-37, build-tools 34-36). AGP 9.5 / Gradle 9.8 / compileSdk 37 (Compose
   1.12 needs it), Media3 1.11, minSdk 33. Package `com.jimboyo.localbeat`
-- Release key: `~/.config/localbeat/` (not in git). **Back it up**: updates
+- Release key: `~/.config/localbeat/` (not in git; a copy on the Mac server,
+  `~/backup/localbeat/`, since 2026-11-13). **Back it up**: updates
   need the same key; without it the build falls back to the debug key. Bump
   `versionCode` for every APK handed out
 - Code map: `tags/` (Ogg/Vorbis reader), `library/` (scan, cache, grouping),
