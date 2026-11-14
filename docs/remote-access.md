@@ -125,9 +125,9 @@ Choices:
   nothing and costs no battery.
 - **The music service binds to `10.8.0.1` only**, backed by an nftables rule.
   From the internet the only open port is UDP 51820, and it's silent.
-- **Dynamic DNS with Route 53** (the user works with AWS): a cron job on the
-  Pi updates an A record when the Fios IP changes, using an IAM user allowed to
-  change only that record.
+- **Dynamic DNS: the ASUS router's own** (2026-11-13, in place of the
+  Route 53 plan: free, no AWS at home): `vpn.example.com`, kept up to
+  date by the router. Phones' WireGuard endpoint: that name, port 51820.
 - **One key per person**: removing someone is deleting their `[Peer]` block
   (`wg syncconf` applies it without dropping the others).
 
