@@ -1,236 +1,347 @@
-# Controlling LocalBeat from a computer: design note (2026-11-12)
+# AI control and playlists: design note
 
-Status: idea, nothing built. Remote access is on hold until the Mac Mini is
-running; this is planned now and built later.
+Written 2026-11-12 (adb-only, before the server existed); **revised
+2026-11-17** now that the music server runs on the Mac Mini. Status: design
+agreed piece by piece; step 1 (playlists on the server) is being built.
 
 ## The idea
 
-A command line on the laptop that controls the phone app fully:
-- **Real-time control:** play, pause, skip and seek, plus what's playing.
-- **The library:** list and search albums, artists and songs.
-- **The queue and playlists:** show, build and change them.
+Let Claude (or another AI) work with LocalBeat the way a person would:
+search the library, build playlists from things found elsewhere ("the 50
+best road-trip songs" from a web page, matched against what's here), change
+them, and later play them on the phone. A playlist made this way should show
+up **everywhere**: on the phone, in LocalBeat Studio and to the AI.
 
-Everything comes back as JSON, so scripts and AI assistants can use it as
-well as people. On top of that, an **MCP server** lets an AI (Claude Code,
-Claude Desktop, others) use it as a set of tools: "make a 1970s
-singer-songwriter playlist and play it in the car". Beyond that, it's a
-platform: a stable, documented command set that other things can be built on.
+## Decisions
 
-## Principles
-
-- **The offline edition stays offline.** No INTERNET permission, no
-  sockets, not even on the phone itself (a localhost web server would need
-  INTERNET). So the channel is **adb**, over USB or wireless debugging.
-- **No new way in.** Only adb may use the control channel. Other apps on the
-  phone can't, and anything with adb access can already control the phone.
-- **Works on a Google-free phone:** adb and content providers are plain
-  Android. No Google services are involved.
-- **One set of rules.** Commands go through the same code as the app's own
-  screens and Android Auto (`BrowseTree`, `PlaylistStore`, the
-  `MediaLibraryService`), so a playlist made from the command line is the same
-  as one made by hand.
-- **A versioned contract.** Commands and JSON are documented and versioned
-  (`api_version`). New fields may be added; anything that changes or goes away
-  means a new version.
+- **Playlists live on the music server** (user, 2026-11-17): LocalBeatServer
+  on the Mac Mini stores them, so one playlist shows on the phone, in Studio
+  and to an AI. Standard Subsonic/OpenSubsonic calls (`getPlaylists`,
+  `getPlaylist`, `createPlaylist`, `updatePlaylist`, `deletePlaylist`), so
+  any Subsonic app (and Navidrome, for the tests) works the same way.
+- **The phone keeps its own playlists** (`PlaylistStore`, .m3u8 in the app's
+  storage) for the offline edition and for using the Connected edition with
+  no server. The Connected edition shows both kinds side by side.
+- **The AI talks to the server, not to the phone.** `localbeat mcp` (part of
+  Studio's `localbeat` command) is an MCP server over stdio that calls the
+  server's Subsonic API with Studio's login (`localbeat.json` `server`).
+  Searching and building playlists need no phone at all.
+- **Live playback control** (play/pause/skip on the phone) stays the adb
+  channel from the first version of this note, and comes later (see "Live
+  control on the phone").
+- **No new way in.** Everything goes over the existing Subsonic API, inside
+  WireGuard / the home network, with the existing logins (one per device, each attached to a user).
 
 ## The layers
 
 ```
 AI (Claude Code, Claude Desktop, …)
-   │  MCP (tools)
+   │  MCP over stdio (tools)
    ▼
-localbeat mcp            ← a thin MCP server: one tool per command
-   │
-localbeat player …       ← the CLI on the laptop (JSON out)
-   │  adb shell content call …
+localbeat mcp              ← Studio's CLI (CDRipPipeline cli/), JSON tools
+   │  Subsonic API (core subsonic.rs), Studio's login
    ▼
-LocalBeat on the phone: ControlProvider (callers other than adb refused)
-   │
-PlaybackService / Library / PlaylistStore / QueueStore
+LocalBeatServer (Mac Mini) ── playlists stored here ──┐
+   ▲                                                  │
+   │  Subsonic API (the phone's own login)            │ same playlists
+LocalBeat Connected (phone) ◄─────────────────────────┘
+LocalBeat Studio (Library page, later)
+
+Later, live control:  localbeat player … ─adb─► ControlProvider on the phone
 ```
 
-### 1. On the phone: a control provider
+## 1. Playlists on the server (LocalBeatServer)
 
-An exported `ContentProvider`, `content://com.jimboyo.localbeat.control`,
-that only implements `call(method, arg, extras)`. From the laptop:
+### Who sees what
 
-```sh
-adb shell content call --uri content://com.jimboyo.localbeat.control \
-    --method status
-adb shell content call --uri content://com.jimboyo.localbeat.control \
-    --method play --arg album:a1b2c3 --extra shuffle:b:true
+**Everyone has their own playlists and can share one with other people on
+the server** (user, 2026-11-17).
+
+- **Users and devices** (user, 2026-11-17): every device (a phone, Studio on
+  a computer) is **attached to one user** when it joins. Today's logins
+  become devices: `my-phone`, `my-windows-pc`, `my-linux-pc` all belong to
+  user `jim`. Playlists belong to the **user**, so every phone and every
+  Studio of that user sees and edits the same playlists, with nothing to
+  sync by hand; the AI, using Studio's device login, works on the same ones.
+- The server learns who is who from a **users file**,
+  `/etc/localbeat/users` (setting `users = "…"`), read at start and on
+  SIGHUP like the logins:
+
+  ```
+  # user: devices
+  jim: my-phone my-windows-pc my-linux-pc
+  ```
+
+  A device not listed is a user of its own (named after the device), so
+  nothing breaks before the file exists. `localbeat-people add DEVICE --user
+  jim` writes it, `list` shows devices under their user, and the admin page
+  asks "whose device?" when approving a join (an existing user, or a new
+  one). Studio's join request can suggest the user; the admin decides.
+- **Sharing:** the owner can share a playlist with named people
+  (`sharedWith`) or with everyone (Subsonic's `public` flag). People it's
+  shared with **see and play it but don't change it**; they can copy it to
+  make their own. Only the owner edits, renames,
+  shares or deletes (from any of their devices).
+- `getPlaylists` returns: mine, shared with me, public; each with `owner`
+  (the user) and, for my own, `sharedWith`.
+- Subsonic has no "share with a user" call, so this is **our OpenSubsonic
+  extension `localbeatPlaylistSharing`** (declared in
+  `getOpenSubsonicExtensions`; clients use it only when declared):
+  `createPlaylist`/`updatePlaylist` accept `sharedWith` (repeated; the new
+  list; `sharedWith=` with no value clears it), and `getUsers` lists the
+  users (`username` = user) for a "share with…" picker, for any device.
+
+### Where and how they're stored
+
+- One **JSON file per playlist** in a playlists folder on the Mac:
+  `/var/lib/localbeat/playlists/<id>.json` (systemd `StateDirectory=localbeat`;
+  owned by the `localbeat` user). Setting `playlists = "/path"` in
+  `server.toml`; without it the playlist calls answer "not available".
+  **Not in the cache folder** (that one is disposable) and **not under
+  `/srv/music`** (the server only reads the library; writers own it).
+- Written to `<id>.json.tmp`, synced, then renamed (a crash never leaves half
+  a playlist). Read once at start; kept in memory; one lock for changes.
+- The folder needs backing up with the library (`plan.md`: backups).
+- Playlist IDs: `p` + 12 hex digits (random). File:
+
+```json
+{
+  "id": "p3f9a0c1d2e4b",
+  "name": "Road trip",
+  "comment": "From the Rolling Stone list, 2026-11-17",
+  "owner": "jim",
+  "public": false,
+  "sharedWith": ["sam"],
+  "created": 1795392000,
+  "changed": 1795392600,
+  "entries": [
+    {
+      "path": "Bruce Springsteen/Born to Run/01. Bruce Springsteen - Thunder Road.flac",
+      "recording": "bbbbbbbb-0000-4000-8000-000000000001",
+      "artist": "Bruce Springsteen",
+      "title": "Thunder Road",
+      "album": "Born to Run",
+      "duration": 289
+    }
+  ]
+}
 ```
 
-- **Request and response:** `call` returns a Bundle. The reply is one string
-  of JSON in it, so commands like `songs` or `status` return data, not just
-  "sent".
-- **adb only:** `call` checks `Binder.getCallingUid()` and refuses anyone
-  but the shell user (2000; adb runs as it) and root. No permission dialog,
-  nothing for other apps.
-- **Playback** goes through a `MediaController` connected to
-  `PlaybackService`, the same way the UI does, so the notification, lock
-  screen and Android Auto all stay in step.
-- **Lives in `main`**, so both editions have it.
-- **Large replies:** a Binder reply has to stay under about 1 MB. The full
-  song list (thousands of songs) may need paging (`--extra offset/limit`).
+### How songs are referenced (survives a rescan and a re-rip)
 
-### 2. On the laptop: `localbeat player …`
+A server song ID is `s` + a hash of the file's path inside its library, so
+it already survives a rescan, and a re-rip that writes the same file name
+keeps it. It changes when the file name changes (a corrected title, a
+Miscellaneous album replaced by a FLAC rip). So an entry stores the
+**path** plus enough to find the song again:
 
-Part of LocalBeat Studio's `localbeat` command (CDRipPipeline `app/cli`,
-Rust), so the suite has one `localbeat`. It finds the phone the way
-`localbeat sync` does (USB or wireless debugging), turns arguments into
-`content call`s and prints JSON (`--human` for a readable table).
+1. **path** (as `song.path` in the API): the normal case, exact.
+2. else the **MusicBrainz recording ID** (`MUSICBRAINZ_TRACKID`), preferring
+   the FLAC library and the same album name: a re-rip with a new name, or a
+   Misc album superseded by a FLAC rip.
+3. else **artist + title** folded like the library (case, curly quotes),
+   then album, then the duration closest: older rips without MusicBrainz IDs.
+4. else **missing**: kept in the file (the album may come back), left out of
+   `getPlaylist` replies, counted in a `missing` field (our extension) so a
+   client can say "2 songs not found".
 
-Sketch of the commands (names to settle when built):
+Resolving is done at each scan (in memory, cheap); when an entry resolves by
+2 or 3, its stored `path` is updated to the found file so it's exact again.
 
-| Area | Commands |
-|---|---|
-| Now | `status` (song, album, position, playing/paused, shuffle, repeat, queue position) |
-| Control | `play`, `pause`, `toggle`, `next`, `prev`, `seek 1:30`, `shuffle on/off`, `repeat off/all/one`, `volume` (maybe) |
-| Play something | `play album <id>`, `play artist <id>`, `play playlist <id>`, `play songs <id>…`, `--shuffle`, `--from <n>` |
-| Library | `albums`, `artists`, `songs [--album/--artist/--genre/--decade]`, `genres`, `decades`, `recent`, `search <text>`, `album <id>` (with its songs) |
-| Queue | `queue`, `queue add <id>… [--next]`, `queue remove <n>`, `queue move <from> <to>`, `queue clear` |
-| Playlists | `playlists`, `playlist <id>`, `playlist new <name> [songs…]`, `playlist add/remove/move/rename/delete`, `playlist export <id>` (.m3u8) |
-| Live | `watch`: prints one JSON line per change (song, play/pause, queue) |
-| Info | `version` (app version, `api_version`, edition) |
+### The calls (standard Subsonic 1.16.1 / OpenSubsonic)
 
-- **IDs:** the library's own IDs (`t…` songs, `a…` albums, `r…` artists),
-  plus the Music-relative path for songs, which playlists use and which
-  survives a rescan. Search results carry both, so you can search and then
-  play.
-- **`watch` without sockets:** a `wait` method that blocks until something
-  changes or 30 s pass, then returns the new state and a change number;
-  the CLI calls it in a loop. No polling every second, no INTERNET.
+| Call | Parameters | Notes |
+|---|---|---|
+| `getPlaylists` | (`username` ignored) | Mine, shared with me, public: `id`, `name`, `comment`, `owner`, `public`, `songCount`, `duration`, `created`, `changed`, `coverArt` (first song's album) |
+| `getPlaylist` | `id` | The same plus `entry[]` (songs, like `getAlbum`'s), and `missing` |
+| `createPlaylist` | `name` + `songId`… | New playlist; returns it (1.14+) |
+| `createPlaylist` | `playlistId` + `songId`… (+ `name`) | **Replaces the songs** (how clients reorder: there is no "move") |
+| `updatePlaylist` | `playlistId`, `name`, `comment`, `public`, `songIdToAdd`…, `songIndexToRemove`… | Removals by index in the current list (indices of the songs shown, not the missing ones), done before additions |
+| `deletePlaylist` | `id` | Deletes the file |
+| `getUsers` | | The people, for sharing (extension, see above) |
 
-### 3. For AI: `localbeat mcp`
+- Changing someone else's playlist (shared with me or public): error 50
+  (not authorized), nothing changes.
 
-**MCP (Model Context Protocol)** is an open standard for giving an AI
-assistant tools: a small program declares its tools (name, description,
-JSON parameters), and the AI app runs it and calls them. Here, each CLI
-command becomes a tool (`search_library`, `play`, `create_playlist`, …).
+- **Repeated parameters** (`songId=a&songId=b`): the server's parameter
+  reading becomes a multimap.
+- **Long lists:** OpenSubsonic `formPost` extension: parameters may come in a
+  `application/x-www-form-urlencoded` POST body (a 200-song playlist doesn't
+  fit a URL nicely). Declared in `getOpenSubsonicExtensions`.
+- Unknown song IDs in `songId`/`songIdToAdd`: error 70 and nothing changes
+  (the AI should match first; a silently shorter playlist would mislead).
+- Logged like other calls (name of the call, `id`), never the song lists.
 
-- A subcommand of the same `localbeat` binary, speaking MCP over
-  stdin/stdout (the "stdio" transport): nothing listens on the network.
-  Claude Code adds it with `claude mcp add localbeat -- localbeat mcp`.
-- Thin: it calls the same code as the CLI, so they never disagree.
-- **Without MCP:** Claude Code can already run the CLI through its shell,
-  so the CLI alone is enough for Claude Code. MCP makes it work in apps
-  without a shell (Claude Desktop, others) and gives the AI clear tool
-  descriptions.
-- Tools that change things (delete a playlist, clear the queue) say so in
-  their description, so the AI app can ask before using them.
+## 2. Matching: lists from elsewhere → library songs
 
-## The Connected edition later
+"Artist – Title" lines in, library song IDs out. **Done in Studio, not on
+the server** (keeps the server standard; Studio already fetches the whole
+catalogue for its Library page, `server_library.rs`):
 
-With the music server, the same command set could also go over the network
-(the server passing commands to the phone, or the phone answering on the
-WireGuard tunnel). Not planned: adb first; revisit once remote access works.
+- Input: one song per line, `Artist - Title` (also `–`, `—`, `"Title" by
+  Artist`, a leading number "12." dropped).
+- Folded like the library (case, curly quotes, `&`/`and`, accents kept),
+  plus title clean-up: "(Remastered 2011)", "- Live", "(feat. …)" ignored
+  for matching but reported.
+- Per line: `found` (one song, or several: all versions, the FLAC/studio
+  album first), `close` (fuzzy: suggestions with why), or `not_found`.
+- Never guesses silently: the reply says how each line matched, so the AI
+  (or the person) decides.
 
-## Asking for music in words ("play me some great driving songs")
+## 3. `localbeat mcp` (Studio's CLI)
 
-**What the AI already knows is most of it.** For well-known music, an AI
-knows which songs suit driving, a rainy Sunday or a party, and what they
-sound like. What it doesn't know is **what's in this library**, so the tools
-have to make that cheap to look at:
+An MCP server over stdio, `claude mcp add localbeat -- localbeat mcp`. Small,
+hand-written JSON-RPC (initialize, tools/list, tools/call) on `serde_json`;
+no MCP SDK unless that turns out simpler. Uses the `server` login from
+`localbeat.json` and the catalogue cache.
 
-- `songs --compact`: one short line per song (id, artist, title, year,
-  genres), so the whole library fits in one reply. That's about 3,900 songs
-  today (2026-11), roughly 80k tokens: workable, but not on every request. Paged and
-  filterable (`--genre rock --decade 1970`).
-- Or the other way round: the AI suggests songs from its own knowledge, and
-  `match` checks which are here: a list of "artist – title" lines in, the
-  library's IDs out (folded like `Library.kt`, so curly and straight
-  apostrophes match). Cheap, and it suits "great driving songs" well.
-- Then `play songs …` or `playlist new "Driving" …`.
+| Tool | What | Changes things |
+|---|---|---|
+| `library_summary` | Counts, genres, decades, artists with album counts | |
+| `search` | Text search (artist, album, title), with filters genre/decade | |
+| `list_songs` | Compact lines (id, artist, title, year, genres), paged and filterable: the whole library is ~80k tokens, so filtered | |
+| `match_songs` | Lines in → matches out (section 2) | |
+| `list_playlists`, `get_playlist` | | |
+| `create_playlist` | name, comment, song IDs | yes |
+| `add_to_playlist`, `remove_from_playlist`, `reorder_playlist`, `rename_playlist` | | yes |
+| `delete_playlist` | | yes (asks the AI to confirm with the user in its description) |
+
+Typical use: the AI reads a web page of road-trip songs, calls
+`match_songs`, shows what's here and what isn't, then `create_playlist`.
+
+The same commands also exist for people and scripts: `localbeat playlist
+[list|show|new|add|remove|rm]` and `localbeat match < list.txt`, JSON with
+`--json`.
+
+## 4. The phone (Connected edition)
+
+- `SubsonicApi.kt`: the five calls (POST form for long lists when the server
+  declares `formPost`, else GET).
+- `SubsonicServer.kt`: fetches `getPlaylists` with the albums (and again on
+  rescan / coming back), entries as server tracks (`trackId(serverKey,
+  songId)`), so offline copies and streaming work as for albums.
+- **With a server, the phone's playlists are the user's server playlists.**
+  One list, no "on this phone / on the server" split: what the user makes
+  in Studio, with the AI or on another phone is simply there. Shared with
+  me / public ones in their own section ("From sam"), read only, with "Make
+  a copy". They play like any playlist (and in Android Auto).
+- **Works with the server out of reach:** the last fetched playlists are
+  kept on the phone (and their songs, when downloaded for offline, play as
+  today). Changes made meanwhile are queued as operations (add, remove,
+  move, rename, new, delete) and sent in order when the server is back;
+  every change is "set the playlist to this", so a resend is harmless. If
+  the same playlist changed on the server meanwhile, the server's version
+  wins and the phone says so (rare: one user, edits on one device at a
+  time).
+- Editing sends the change at once when reachable; a move is
+  `createPlaylist playlistId=… songId=…` with the new order.
+- **Moving in:** the first time a phone with its own playlists connects to
+  a server, it offers to move them to the user's server playlists
+  (matching Music-relative paths to server songs by path without extension,
+  since the phone has `.opus` copies of the server's `.flac`, else artist +
+  title; songs not found listed). Kept on the phone until that succeeds.
+- Offline edition, or Connected with no server set: `PlaylistStore` as
+  today.
+
+## 5. LocalBeat Studio
+
+- Studio's playlists are the same user's server playlists: the Library page
+  shows them (play, rename, remove and reorder songs, "add to playlist" on
+  songs and albums), cached for when the server is out of reach, changes
+  queued like the phone's. Not needed for the AI to work, so after the
+  phone.
+- Studio already joins as a device of a user (`docs/joining.md`); the join
+  request asks which user.
+
+## Live control on the phone (later; from the 2026-11-12 plan)
+
+Unchanged in substance, moved after playlists:
+
+- An exported `ContentProvider` (`content://com.jimboyo.localbeat.control`),
+  only `call(method, arg, extras)`, refusing every caller but adb's shell
+  user (uid 2000) and root; one JSON string per reply; in `main`, so both
+  editions have it. Playback through a `MediaController` on
+  `PlaybackService`, so notification, lock screen and Android Auto agree.
+- `localbeat player …` in Studio's CLI finds the phone like `localbeat sync`
+  (USB or wireless debugging) and runs `adb shell content call …`:
+  `status`, `play`/`pause`/`toggle`/`next`/`prev`/`seek`, shuffle, repeat,
+  `play playlist <id>` (phone or server playlist), the queue, and `watch`
+  (a blocking `wait` method, one JSON line per change).
+- Then MCP tools `now_playing`, `play`, `pause`, `skip`, `play_playlist`.
+- First prove the risky part: starting playback with the app in the
+  background (Android's limits on starting foreground services).
+- Over the network instead of adb (the server passing commands to the phone)
+  is not planned.
+
+## Asking for music in words
+
+**What the AI already knows is most of it.** For well-known music it knows
+which songs suit driving, a rainy Sunday or a party. What it doesn't know is
+what's in this library, so the tools make that cheap: `match_songs` (the AI
+suggests, the library confirms), and filtered `list_songs`.
 
 **Metadata that would help** (in order of value):
 
 | What | Where from | Notes |
 |---|---|---|
-| Genres (have), original year (have) | MusicBrainz, via `mb-enrich.py` | Already in the tags; fine for "70s rock" |
-| **Play history**: play counts, last played, skips | The phone itself | Local and private. "Something I haven't heard in a while", "my favourites". The most useful new data, and no network |
-| Tempo, energy, mood, "danceable" | **Measured on the laptop** from the FLAC (e.g. Essentia, open source, offline) | Good for "upbeat", "calm", "fast" without trusting anyone's tags. Written as tags by Studio, read by the phone |
-| MusicBrainz community tags ("road trip", "melancholic") | MusicBrainz, by the IDs we already have | Patchy for less-known albums |
-| **Lyrics** | **LRCLIB** (free, open, no account, time-synced) on the laptop | Saved as `.lrc` next to the songs or in a LYRICS tag; the app only reads files (CLAUDE.md: lyrics only from the files). Lyrics are copyrighted: fine for personal use, never shared or published |
+| Genres (have), original year (have) | MusicBrainz, by Studio | Already in the tags |
+| **Play history**: counts, last played, skips | The phone, or the server's `stream` log | "Something I haven't heard in a while". Subsonic has `scrobble` for this |
+| Tempo, energy, mood | Measured by Studio from the FLAC (e.g. Essentia, offline) | Written as tags; everyone reads them |
+| MusicBrainz community tags ("road trip") | MusicBrainz, by our IDs | Patchy |
+| Lyrics | LRCLIB, by Studio | `.lrc` or a LYRICS tag; personal use only |
 
-Rule for all of it: **the laptop (LocalBeat Studio) fetches or measures, and
-writes tags or files; the phone only reads them.** That keeps the offline
-edition offline, the same as `localbeat enrich` today.
+Rule: **Studio fetches or measures and writes tags or files; the server and
+the phone only read them.**
 
-## Asking from the phone (no laptop)
+## Asking from the phone (no computer)
 
-- **An AI app on the phone can't reach an adb-only channel.** The Claude
-  phone app (and others) use *remote* MCP servers: the AI company's servers
-  connect to an address on the internet. LocalBeat's offline edition can't
-  be that, and exposing a home server to the internet goes against the
-  WireGuard-only plan in `remote-access.md`.
-- **Voice already half-works:** `BrowseTree.voice` handles Android's
-  "play X on LocalBeat" (needs Google Assistant or Gemini, so not on a
-  Google-free phone). It matches names; it doesn't understand "driving
-  songs".
-- **Options for later:** (a) an AI inside the Connected edition calling an
-  AI company's API directly (network, an account and a key: a big step away
-  from the principles); (b) an MCP endpoint on the home server, reachable
-  only on the tunnel, with an AI app that runs on the laptop or on a home
-  computer; (c) on-phone AI models (Android's built-in Gemini Nano, or an
-  open model) once they are good enough: offline, but Google-dependent or
-  heavy. **Decide after the laptop version works.**
+An AI app on the phone uses *remote* MCP servers (reached from the AI
+company's servers over the internet), which goes against the WireGuard-only
+rule (`remote-access.md`). Options for later: an MCP endpoint on the Mac,
+tunnel-only, for an AI app that runs on a home computer; or on-phone models.
+Decide after the computer version works.
 
 ## Order of work
 
-Each step ends with something that works; 2 and 3 already give control.
+Each step ends with something that works.
 
-1. **The contract** (`docs/control-api.md`): method names, arguments, JSON
-   for each reply, error format, IDs, `api_version`. Reviewed before any
-   code.
-   *Done when:* every command in the table above has an example request and
-   reply.
-2. **The control channel on the phone**: the content provider, adb-only,
-   with `version`, `status`, `play`/`pause`/`toggle`/`next`/`prev`/`seek`,
-   shuffle and repeat. **First, prove the risky part:** starting playback
-   while the app is in the background or closed (Android limits starting
-   foreground services; Media3 may cover it).
-   *Done when:* `adb shell content call …` pauses and resumes music with
-   the screen off, and another app's call is refused.
-3. **`localbeat player` on the laptop** (CDRipPipeline `app/cli`): finds
-   the phone like `localbeat sync`, JSON out, `--human` tables, clear errors
-   ("phone not connected", "LocalBeat too old: update it").
-   *Done when:* `localbeat player status` and `pause` work over USB and
-   wireless debugging.
-4. **Library and playing things:** `albums`, `artists`, `songs`, `genres`,
-   `decades`, `recent`, `search`, `match`, `album <id>`, `play album/artist/
-   playlist/songs`, and the queue (`queue`, `add [--next]`, `remove`,
-   `move`, `clear`). Paging for big lists.
-   *Done when:* "search, then play the third result" works, and the whole
-   library lists in pages.
-5. **Playlists:** `playlists`, `playlist <id>`, `new`, `add`, `remove`,
-   `move`, `rename`, `delete`, `export`. Same `PlaylistStore` as the app.
-   *Done when:* a playlist made from the laptop shows up in the app and in
-   Android Auto, and exports as the same .m3u8.
-6. **`watch`:** the blocking `wait` method on the phone, a loop in the CLI,
-   one JSON line per change.
-   *Done when:* skipping a song on the phone prints a line on the laptop
-   within a second.
-7. **`localbeat mcp`:** an MCP server over stdio, one tool per command, with
-   descriptions written for an AI, and "changes things" marked.
+1. **Playlists on the server** (LocalBeatServer): store, the five calls,
+   users file (devices → user), sharing extension + `getUsers`, repeated
+   parameters, `formPost`, resolving entries after a rescan.
+   Tests in `tests/api.rs` (incl. two devices of one user seeing the same
+   playlists, sharing, a renamed file found again by recording ID, a
+   missing one kept).
+   *Done when:* the tests pass and, on the Mac, a playlist made with `curl`
+   survives a server restart.
+1b. **Devices attached to users on the Mac**: `localbeat-people add DEVICE
+   --user NAME` (and `list` grouped by user), the admin page asks "whose
+   device?" on Approve, `/etc/localbeat/users` written for today's devices.
+   *Done when:* `my-phone` and `my-windows-pc` show as jim's devices.
+2. **Studio CLI: playlists and matching** (CDRipPipeline): core
+   `subsonic.rs` playlist calls, `localbeat playlist …`, `localbeat match`.
+   *Done when:* a text file of 30 road-trip songs becomes a server playlist
+   from the Windows laptop, with a clear list of what wasn't found.
+3. **`localbeat mcp`**: the tools above over stdio.
    *Done when:* Claude Code (`claude mcp add localbeat -- localbeat mcp`)
-   builds and plays "great driving songs" from this library.
+   builds a road-trip playlist from a web page.
+4. **Phone: the user's server playlists, shown and played** (Connected
+   edition, read only, kept for when the server is out of reach).
+   *Done when:* step 3's playlist plays on the phone, also offline after
+   downloading, and in Android Auto.
+5. **Phone: editing (queued while out of reach), shared ones, moving the
+   phone's own playlists in.**
+   *Done when:* a song added on the phone shows in Studio's `localbeat
+   playlist show`, and one added in airplane mode arrives once back.
+6. **Studio Library page: the same playlists.**
+7. **Live control on the phone** (adb), as above, then MCP tools for it.
 
-**After the seven:** play history on the phone (counts, last played,
-skips), then tempo/energy measured on the laptop, then lyrics (LRCLIB, by
-Studio). Each makes the AI better at choosing.
+After that: play history, tempo/energy, lyrics.
 
 ## Open questions
 
-- Which extra metadata to go after, and in what order (see "Asking for
-  music in words").
-- Asking from the phone without the laptop: which of the options, if any.
-
-- Where the CLI lives: Studio's `localbeat` (recommended) or a separate
-  tool in this repo.
-- Whether controlling playback should wake the app if it isn't running
-  (probably yes: a `call` starts the app's process anyway).
-- Volume: the phone's media volume (`adb shell cmd media_session volume`)
-  or nothing.
-- Testing: unit tests for the JSON (Robolectric), plus a script that runs
-  the CLI against the phone.
+- Whether people a playlist is shared with may also edit it (now: view,
+  play and copy only).
+- Whether `match` should also be offered by the server (an OpenSubsonic
+  extension) so the phone could import a text list without Studio.
+- Navidrome as a test reference for playlists: its own storage differs
+  (per user, private by default); clients use only the standard calls.
