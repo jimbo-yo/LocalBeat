@@ -178,7 +178,12 @@ decisions, 2026-11-17):
   create/edit. No phone needed.
 - Order: 1 server playlists (built, LocalBeatServer branch `playlists`, on
   the Mac 2026-11-17), 1b devices → users on the Mac, 2 Studio CLI
-  `playlist`/`match` (done 2026-11-17), 3 (done 2026-11-17)
+  `playlist`/`match` (done 2026-11-17), 3 (done 2026-11-17), 4 (done
+  2026-11-17, 0.9.7: `MusicServer.playlists`, fetched with the catalogue
+  and saved in `server-playlists.json`; `Playlist.onServer` entries are
+  server track IDs; `Library.standIns` maps a server song merged away to
+  its phone copy; Playlists tab section "On the music server", read-only
+  page; Android Auto via `LocalBeatApp.allPlaylists()`)
   `localbeat mcp`, 4 phone shows/plays server playlists, 5 phone edits
   them, 6 Studio's Library page, 7 live control over adb
   (`localbeat player …` via a content provider that refuses all callers but

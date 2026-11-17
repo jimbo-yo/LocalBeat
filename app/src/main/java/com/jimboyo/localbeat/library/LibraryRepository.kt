@@ -199,11 +199,11 @@ class LibraryRepository(private val context: Context) {
     @Synchronized
     private fun publish(phone: List<Track>) {
         phoneTracks = phone
-        val all = Library(Library.merge(phone, serverTracks))
+        val all = Library(Library.merge(phone, serverTracks), Library.standIns(phone, serverTracks))
         _library.value = all
         _shown.value =
             if ((serverConnected && !_onPhoneOnly.value) || all.tracks.none { it.onServer }) all
-            else Library(all.tracks.filter { !it.onServer || it.id in keptIds })
+            else Library(all.tracks.filter { !it.onServer || it.id in keptIds }, all.standIns)
     }
 
     private class Row(val id: Long, val path: String, val modified: Long, val size: Long, val durationMs: Long, val dateAdded: Long)

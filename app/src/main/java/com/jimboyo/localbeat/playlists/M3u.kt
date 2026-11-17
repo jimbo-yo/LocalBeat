@@ -3,10 +3,26 @@ package com.jimboyo.localbeat.playlists
 import com.jimboyo.localbeat.library.Library
 import com.jimboyo.localbeat.library.Track
 
-/** A playlist: a name and a list of paths relative to Music/ (the phone-sync layout). */
-data class Playlist(val id: String, val name: String, val entries: List<String>) {
-    /** The playlist's songs that are on the phone (entries for removed albums are kept but skipped). */
-    fun tracks(lib: Library): List<Track> = entries.mapNotNull(lib::trackByRelativePath)
+/**
+ * A playlist: a name and its songs. A phone playlist ([PlaylistStore]) lists
+ * paths relative to Music/ (the phone-sync layout); one from the music server
+ * ([onServer], Connected edition) lists track IDs of server songs, which play
+ * the phone's copy when there is one ([Library.track]).
+ */
+data class Playlist(
+    val id: String,
+    val name: String,
+    val entries: List<String>,
+    val onServer: Boolean = false,
+    /** Server playlists: the user it belongs to. */
+    val owner: String = "",
+    /** Server playlists someone else shared (or made public): play only. */
+    val readOnly: Boolean = false,
+    val comment: String = "",
+) {
+    /** The playlist's songs that can play now (entries for songs not here are kept but skipped). */
+    fun tracks(lib: Library): List<Track> =
+        if (onServer) entries.mapNotNull(lib::track) else entries.mapNotNull(lib::trackByRelativePath)
 }
 
 /**

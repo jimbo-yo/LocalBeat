@@ -8,6 +8,7 @@ import androidx.core.content.edit
 import com.jimboyo.localbeat.LocalBeatApp
 import com.jimboyo.localbeat.library.LibraryCache
 import com.jimboyo.localbeat.library.Track
+import com.jimboyo.localbeat.playlists.Playlist
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,6 +57,9 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     override val status: StateFlow<ServerStatus> = _status.asStateFlow()
     private val _tracks = MutableStateFlow<List<Track>>(emptyList())
     override val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
+    private val playlistsFile = File(app.filesDir, "server-playlists.json")
+    private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
+    override val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
     @Volatile private var api: SubsonicApi? = null
     private var refreshJob: Job? = null
@@ -97,7 +101,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
                 fetch()
             }
         } else {
-            scope.launch { _tracks.value = pinnedOnly() }
+            scope.launch { _tracks.value = pinnedOnly(); _playlists.value = savedPlaylists() }
         }
 
         // Downloads waiting for Wi-Fi (or for the server) carry on when the network changes.
@@ -141,7 +145,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             api = null
             _status.value = ServerStatus.Off
             updateWatch()
-            refreshJob = scope.launch { _tracks.value = pinnedOnly() }
+            refreshJob = scope.launch { _tracks.value = pinnedOnly(); _playlists.value = savedPlaylists() }
             return
         }
         if (s.address.isBlank()) {
@@ -154,13 +158,31 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         refreshJob = scope.launch {
             // Show the last known songs straight away, even if the server can't be reached now.
             if (_tracks.value.isEmpty()) loadSavedCatalogue()
+            // Another server or user: not their playlists.
+            _playlists.value = savedPlaylists()
             fetch()
         }
     }
 
-    /** The song list saved after the last successful fetch, if it's from this server and user. */
+    /** The song list (and playlists) saved after the last successful fetch, if from this server and user. */
     private fun loadSavedCatalogue() {
         savedCatalogue()?.let { if (api != null) _tracks.value = it }
+        _playlists.value = savedPlaylists()
+    }
+
+    /** The playlists saved after the last fetch, if they're from this server and user. */
+    private fun savedPlaylists(): List<Playlist> {
+        if (prefs.getString("playlistsFor", null) != serverKey()) return emptyList()
+        return runCatching { playlistsFromJson(playlistsFile.readText()) }.getOrDefault(emptyList())
+    }
+
+    private fun savePlaylists(lists: List<Playlist>) {
+        runCatching {
+            val tmp = File(playlistsFile.path + ".tmp")
+            tmp.writeText(playlistsToJson(lists))
+            if (!tmp.renameTo(playlistsFile)) throw IOException("can't replace ${playlistsFile.name}")
+            prefs.edit { putString("playlistsFor", serverKey()) }
+        }.onFailure { Log.w(TAG, "Saving the server's playlists: ${it.message}") }
     }
 
     private fun savedCatalogue(): List<Track>? =
@@ -191,6 +213,15 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             _tracks.value = tracks
             LibraryCache.write(cacheFile, tracks)
             prefs.edit { putString("savedFor", serverKey()) }
+            // Playlists: a server without them (or a failure here) keeps the songs working.
+            runCatching { a.playlists().mapNotNull { SubsonicApi.toPlaylist(serverKey(), a.username, it) } }
+                .onSuccess { lists ->
+                    if (api === a) {
+                        _playlists.value = lists
+                        savePlaylists(lists)
+                    }
+                }
+                .onFailure { Log.w(TAG, "Server playlists: ${it.message}") }
             val connectedStatus = ServerStatus.Connected(ping.type, ping.version, tracks.size, extensions)
             lastConnected = connectedStatus
             fetched = true

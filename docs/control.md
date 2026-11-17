@@ -3,8 +3,11 @@
 Written 2026-11-12 (adb-only, before the server existed); **revised
 2026-11-17** now that the music server runs on the Mac Mini. Status: design
 agreed 2026-11-17. Done: step 1 (server playlists, on the Mac), step 2
-(Studio's `localbeat playlist` and `localbeat match`) and step 3
-(`localbeat mcp`).
+(Studio's `localbeat playlist` and `localbeat match`), step 3
+(`localbeat mcp`) and step 4 (LocalBeat 0.9.7 shows and plays server
+playlists: seen on the Pixel 9 with the playlist made through
+`localbeat mcp`; keeping its songs for offline and Android Auto are built
+and unit-tested but not yet tried on the phone or in the car).
 
 ## The idea
 

@@ -74,7 +74,11 @@ class Artist(
     val tracks: List<Track> get() = albums.flatMap { it.tracks } + looseTracks
 }
 
-class Library(tracks: List<Track>) {
+class Library(
+    tracks: List<Track>,
+    /** Server track ID → the phone copy that plays instead ([Library.standIns]). */
+    val standIns: Map<String, String> = emptyMap(),
+) {
     /** Sorted by title. */
     val tracks: List<Track>
     /** Sorted by title. */
@@ -153,7 +157,8 @@ class Library(tracks: List<Track>) {
     private val tracksByRelPath by lazy { tracks.associateBy { relativePath(it.path).lowercase(Locale.ROOT) } }
     private val tracksByName by lazy { tracks.groupBy { it.path.substringAfterLast('/').lowercase(Locale.ROOT) } }
 
-    fun track(id: String): Track? = tracksById[id]
+    /** A track by ID; a server song whose phone copy plays instead ([standIns]) gives that copy. */
+    fun track(id: String): Track? = tracksById[id] ?: standIns[id]?.let(tracksById::get)
     fun album(id: String): Album? = albumsById[id]
     fun artist(id: String): Artist? = artistsById[id]
     fun albumOf(track: Track): Album? = albumIdByTrack[track.id]?.let(albumsById::get)
@@ -187,6 +192,20 @@ class Library(tracks: List<Track>) {
             val have = HashSet<String>()
             for (t in phone) have += songKeys(t)
             return phone + server.filter { s -> songKeys(s).none { it in have } }
+        }
+
+        /**
+         * For the server songs [merge] drops: server track ID → the phone copy's
+         * ID, so something that names the server song (a server playlist) plays
+         * the phone's copy.
+         */
+        fun standIns(phone: List<Track>, server: List<Track>): Map<String, String> {
+            if (server.isEmpty() || phone.isEmpty()) return emptyMap()
+            val byKey = HashMap<String, String>()
+            for (t in phone) for (k in songKeys(t)) byKey.putIfAbsent(k, t.id)
+            val out = HashMap<String, String>()
+            for (s in server) songKeys(s).firstNotNullOfOrNull(byKey::get)?.let { out[s.id] = it }
+            return out
         }
 
         /** A song's identities: by MusicBrainz release when tagged *and* by artist + album title (old rips lack the ID). */

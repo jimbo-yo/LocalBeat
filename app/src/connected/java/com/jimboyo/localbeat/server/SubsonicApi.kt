@@ -2,6 +2,7 @@ package com.jimboyo.localbeat.server
 
 import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.library.shortHash
+import com.jimboyo.localbeat.playlists.Playlist
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -21,7 +22,7 @@ import java.security.SecureRandom
  */
 internal class SubsonicApi(
     address: String,
-    private val username: String,
+    val username: String,
     private val password: String,
     private val open: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) {
@@ -97,6 +98,15 @@ internal class SubsonicApi(
     fun songs(): List<JSONObject> = paged { offset ->
         call("search3", listOf("query" to "", "artistCount" to "0", "albumCount" to "0", "songCount" to PAGE.toString(), "songOffset" to offset.toString()))
             .optJSONObject("searchResult3")?.optJSONArray("song")
+    }
+
+    /** The user's playlists, those shared with them and public ones, each with its songs (`entry`). */
+    fun playlists(): List<JSONObject> {
+        val list = call("getPlaylists").optJSONObject("playlists")?.optJSONArray("playlist") ?: return emptyList()
+        return (0 until list.length()).mapNotNull { i ->
+            val id = list.getJSONObject(i).optString("id").ifEmpty { return@mapNotNull null }
+            call("getPlaylist", listOf("id" to id)).optJSONObject("playlist")
+        }
     }
 
     private fun paged(page: (Int) -> JSONArray?): List<JSONObject> {
@@ -177,7 +187,56 @@ internal class SubsonicApi(
             }
         }
 
+        /**
+         * A server playlist (getPlaylist's object, with `entry`) as a LocalBeat
+         * playlist of server track IDs. `readonly` is LocalBeat's server's
+         * (someone else's playlist); other servers: read only if the owner isn't us.
+         */
+        fun toPlaylist(serverKey: String, username: String, p: JSONObject): Playlist? {
+            val id = p.optString("id").ifEmpty { return null }
+            val entries = p.optJSONArray("entry")
+            val owner = p.optString("owner")
+            return Playlist(
+                id = id,
+                name = p.optString("name").ifBlank { "Playlist" },
+                entries = (0 until (entries?.length() ?: 0)).mapNotNull { i ->
+                    entries!!.getJSONObject(i).optString("id").takeIf { it.isNotEmpty() }?.let { trackId(serverKey, it) }
+                },
+                onServer = true,
+                owner = owner,
+                readOnly = if (p.has("readonly")) p.optBoolean("readonly") else owner.isNotEmpty() && owner != username,
+                comment = p.optString("comment"),
+            )
+        }
+
         /** "2026-11-08T21:37:01.123Z" -> seconds since 1970 (0 if missing). */
         fun isoSeconds(s: String): Long = runCatching { java.time.Instant.parse(s).epochSecond }.getOrDefault(0)
+    }
+}
+
+/** The server's playlists as saved on the phone (for when the server is out of reach). */
+internal fun playlistsToJson(lists: List<Playlist>): String = JSONArray().apply {
+    for (p in lists) put(
+        JSONObject()
+            .put("id", p.id).put("name", p.name).put("owner", p.owner)
+            .put("readOnly", p.readOnly).put("comment", p.comment)
+            .put("entries", JSONArray(p.entries))
+    )
+}.toString()
+
+internal fun playlistsFromJson(text: String): List<Playlist> {
+    val a = JSONArray(text)
+    return (0 until a.length()).map { i ->
+        val o = a.getJSONObject(i)
+        val e = o.optJSONArray("entries") ?: JSONArray()
+        Playlist(
+            id = o.getString("id"),
+            name = o.optString("name"),
+            entries = (0 until e.length()).map(e::getString),
+            onServer = true,
+            owner = o.optString("owner"),
+            readOnly = o.optBoolean("readOnly"),
+            comment = o.optString("comment"),
+        )
     }
 }

@@ -2,6 +2,8 @@ package com.jimboyo.localbeat
 
 import com.jimboyo.localbeat.library.Library
 import com.jimboyo.localbeat.server.SubsonicApi
+import com.jimboyo.localbeat.server.playlistsFromJson
+import com.jimboyo.localbeat.server.playlistsToJson
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -86,5 +88,37 @@ class SubsonicTest {
         assertTrue(other[0].id != t.id && t.id.startsWith("s"))
         // LocalBeat groups them itself.
         assertEquals(2, Library(tracks).albums.size)
+    }
+
+    /** getPlaylist replies shaped like LocalBeat's server's (owner = the user, readonly, missing). */
+    @Test fun serverPlaylists() {
+        val key = "http://h:4533|my-phone"
+        val mine = JSONObject("""{"id":"p300eeabc4f4e","name":"Road trip","comment":"From a list","owner":"jim","public":false,
+            "songCount":2,"readonly":false,"missing":1,"entry":[{"id":"s1","title":"Thunder Road"},{"id":"s2","title":"Smokestack Lightnin’"}]}""")
+        val p = SubsonicApi.toPlaylist(key, "my-phone", mine)!!
+        assertEquals("Road trip", p.name)
+        assertEquals(listOf(SubsonicApi.trackId(key, "s1"), SubsonicApi.trackId(key, "s2")), p.entries)
+        assertTrue(p.onServer && !p.readOnly)
+        assertEquals("jim", p.owner)
+        assertEquals("From a list", p.comment)
+        // Someone else's, shared: read only. Navidrome has no "readonly": the owner decides.
+        val shared = JSONObject("""{"id":"p2","name":"Sam's","owner":"sam","readonly":true}""")
+        assertTrue(SubsonicApi.toPlaylist(key, "my-phone", shared)!!.readOnly)
+        assertTrue(SubsonicApi.toPlaylist(key, "my-phone", JSONObject("""{"id":"p3","name":"N","owner":"sam"}"""))!!.readOnly)
+        assertTrue(!SubsonicApi.toPlaylist(key, "my-phone", JSONObject("""{"id":"p4","name":"N","owner":"my-phone"}"""))!!.readOnly)
+        assertEquals(null, SubsonicApi.toPlaylist(key, "my-phone", JSONObject("""{"name":"no id"}""")))
+
+        // Kept on the phone for when the server is out of reach: the same after a round trip.
+        val lists = listOf(p, SubsonicApi.toPlaylist(key, "my-phone", shared)!!)
+        assertEquals(lists, playlistsFromJson(playlistsToJson(lists)))
+
+        // Its songs play: the server's tracks, or the phone's copy when the server song was merged away.
+        val tracks = SubsonicApi.toTracks(key, albums, songs)
+        assertEquals(listOf("Thunder Road", "Smokestack Lightnin’"), p.tracks(Library(tracks)).map { it.title })
+        val phoneCopy = tracks[0].copy(id = "tphone", mediaStoreId = 7, path = "/storage/emulated/0/Music/BS/BtR/01.opus", serverSongId = "", serverCoverArt = "")
+        val lib = Library(Library.merge(listOf(phoneCopy), tracks), Library.standIns(listOf(phoneCopy), tracks))
+        assertEquals(listOf("tphone", tracks[1].id), p.tracks(lib).map { it.id })
+        // Server songs that can't play now (not in the library shown) are skipped.
+        assertEquals(listOf("tphone"), p.tracks(Library(listOf(phoneCopy), lib.standIns)).map { it.id })
     }
 }

@@ -2,6 +2,7 @@ package com.jimboyo.localbeat.server
 
 import android.net.Uri
 import com.jimboyo.localbeat.library.Track
+import com.jimboyo.localbeat.playlists.Playlist
 import kotlinx.coroutines.flow.StateFlow
 
 /** How to reach the music server (Settings → Music server). */
@@ -63,6 +64,13 @@ interface MusicServer {
     val status: StateFlow<ServerStatus>
     /** The server's catalogue as tracks; empty while off. Kept between launches. */
     val tracks: StateFlow<List<Track>>
+    /**
+     * The user's playlists on the server, then those shared with them and public
+     * ones ([Playlist.onServer]; songs as server track IDs). Fetched with the
+     * catalogue and kept between launches, so they're there without the server
+     * too (their songs kept on the phone play).
+     */
+    val playlists: StateFlow<List<Playlist>>
     /**
      * Whether server songs can play right now: the server is on, answering, and
      * allowed (not on mobile data with that turned off). While false, the lists

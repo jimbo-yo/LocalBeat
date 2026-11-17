@@ -315,7 +315,7 @@ private fun BackBar(ui: Ui, lib: Library, top: Screen) {
                 is Screen.ArtistPage -> lib.artist(top.id)?.name.orEmpty()
                 is Screen.GenrePage -> lib.genre(top.id)?.name.orEmpty()
                 is Screen.DecadePage -> lib.decade(top.id)?.name.orEmpty()
-                is Screen.PlaylistPage -> ui.app.playlists.get(top.id)?.name.orEmpty()
+                is Screen.PlaylistPage -> ui.app.playlist(top.id)?.name.orEmpty()
                 Screen.NowPlaying -> ""
                 Screen.Equalizer -> "Equalizer"
                 Screen.Settings -> "Settings"

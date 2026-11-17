@@ -5,6 +5,7 @@ import com.jimboyo.localbeat.art.ArtStore
 import com.jimboyo.localbeat.audio.EqualizerStore
 import com.jimboyo.localbeat.library.LibraryRepository
 import com.jimboyo.localbeat.playback.QueueStore
+import com.jimboyo.localbeat.playlists.Playlist
 import com.jimboyo.localbeat.playlists.PlaylistStore
 import com.jimboyo.localbeat.server.MusicServer
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,10 @@ class LocalBeatApp : Application() {
         private set
     /** The user's music server; null in the offline edition. */
     val server: MusicServer? by lazy { Edition.musicServer(this) }
+
+    /** Every playlist: the phone's own, then the music server's (Connected edition). */
+    fun allPlaylists(): List<Playlist> = playlists.playlists.value + server?.playlists?.value.orEmpty()
+    fun playlist(id: String): Playlist? = playlists.get(id) ?: server?.playlists?.value?.firstOrNull { it.id == id }
 
     override fun onCreate() {
         super.onCreate()
