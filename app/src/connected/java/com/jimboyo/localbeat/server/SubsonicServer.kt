@@ -68,6 +68,8 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     @Volatile private var lastConnected: ServerStatus.Connected? = null
     /** Whether the catalogue has been fetched from this server since it was set up. */
     @Volatile private var fetched = false
+    /** When the catalogue was last fetched (elapsedRealtime), to fetch it again when it's old. */
+    @Volatile private var lastFetch = 0L
     private val inUse = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     /** Wakes the watcher early (network changed, a stream failed, came into use). */
     private val kick = Channel<Unit>(Channel.CONFLATED)
@@ -192,6 +194,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             val connectedStatus = ServerStatus.Connected(ping.type, ping.version, tracks.size, extensions)
             lastConnected = connectedStatus
             fetched = true
+            lastFetch = SystemClock.elapsedRealtime()
             _status.value = connectedStatus
             // A fresh, complete fetch: connected now (unless music can't come from it on this network).
             if (meteredBlock() == null) {
@@ -382,6 +385,12 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     override fun setInUse(key: String, inUse: Boolean) {
         val changed = if (inUse) this.inUse.add(key) else this.inUse.remove(key)
         if (changed) updateWatch()
+        // Back on screen: albums added to the server since (a new rip) show up
+        // without a manual refresh. The process outlives the screen (playback
+        // service), so the fetch at start isn't enough.
+        if (changed && inUse && key == "ui" && fetched && _connected.value &&
+            SystemClock.elapsedRealtime() - lastFetch > STALE_MS
+        ) refresh()
     }
 
     override fun checkNow() {
@@ -527,5 +536,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         const val CONNECTED_EVERY_MS = 30_000L
         const val DISCONNECTED_EVERY_MS = 15_000L
         const val RECHECK_MS = 5_000L
+        /** The catalogue is fetched again on coming back on screen when older than this. */
+        const val STALE_MS = 5 * 60_000L
     }
 }

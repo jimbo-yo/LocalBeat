@@ -90,6 +90,12 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
 - Android Studio at `/opt/android-studio`; SDK `~/Android/Sdk` (platforms
   35-37, build-tools 34-36). AGP 9.5 / Gradle 9.8 / compileSdk 37 (Compose
   1.12 needs it), Media3 1.11, minSdk 33. Package `com.jimboyo.localbeat`
+- Windows (the Surface, 2026-11-17): Android Studio in `C:\Program
+  Files\Android\Android Studio`, SDK `%LOCALAPPDATA%\Android\Sdk`. No
+  gradlew.bat: run `./gradlew` from Git Bash with `JAVA_HOME="/c/Program
+  Files/Android/Android Studio/jbr"`. Release key copied from the Mac's
+  backup to `C:\Users\user\.config\localbeat\` (storeFile set to the
+  Windows path). First `dist` build ~11 min
 - Release key: `~/.config/localbeat/` (not in git; a copy on the Mac server,
   `~/backup/localbeat/`, since 2026-11-13). **Back it up**: updates
   need the same key; without it the build falls back to the debug key. Bump
@@ -137,6 +143,11 @@ Opus on demand); keep its CLAUDE.md and the design note in step. Decided: two
 editions from the same code. The normal one stays offline; a "Connected"
 edition adds the network and a "Use remote server" checkbox.
 
+- **Catalogue refresh** (0.9.6, 2026-11-17): fetched at process start, on
+  settings changes, with Refresh (Settings → Music server) and "Rescan
+  library", and on coming back on screen when older than 5 min
+  (`SubsonicServer.STALE_MS`; the playback service keeps the process alive,
+  so the start fetch alone missed new rips)
 - **Server links** (0.9.5, 2026-11-13): the Connected edition opens
   `localbeat://connect?server=…&user=…&secret=…` (LocalBeatServer's second QR
   code, read by the phone's camera; no scanner, no camera permission). The

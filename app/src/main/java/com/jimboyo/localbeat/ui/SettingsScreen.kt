@@ -68,7 +68,8 @@ fun SettingsScreen(ui: Ui, lib: Library) {
             "${plural(lib.tracks.size, "song")}, ${plural(lib.albums.size, "album")}, ${plural(lib.artists.size, "artist")} in Internal Storage/Music.",
             Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium,
         )
-        OutlinedButton(onClick = { ui.app.library.rescan() }, enabled = !scanning, modifier = Modifier.padding(16.dp)) {
+        // Also fetches the music server's albums again (new rips show up).
+        OutlinedButton(onClick = { ui.app.library.rescan(); ui.app.server?.refresh() }, enabled = !scanning, modifier = Modifier.padding(16.dp)) {
             Text(if (scanning) "Scanning…" else "Rescan library")
         }
 

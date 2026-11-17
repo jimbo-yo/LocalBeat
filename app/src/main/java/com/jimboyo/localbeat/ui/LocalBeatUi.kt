@@ -204,7 +204,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                     top == Screen.Equalizer -> EqualizerScreen(ui)
                     !hasPermission -> Message("LocalBeat needs access to your music files.", "Allow access", onGrant)
                     library == null -> Unit
-                    all.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan() }
+                    all.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan(); ui.app.server?.refresh() }
                     top is Screen.AlbumPage -> lib.album(top.id)?.let { AlbumPage(ui, lib, it) }
                     top is Screen.ArtistPage -> lib.artist(top.id)?.let { ArtistPage(ui, lib, it) }
                     top is Screen.GenrePage -> lib.genre(top.id)?.let { GroupPage(ui, it, BrowseTree.GENRE + it.id) }
