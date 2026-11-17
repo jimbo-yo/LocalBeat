@@ -33,7 +33,11 @@ class LocalBeatApp : Application() {
 
     /** Every playlist: the phone's own, then the music server's (Connected edition). */
     fun allPlaylists(): List<Playlist> = playlists.playlists.value + server?.playlists?.value.orEmpty()
-    fun playlist(id: String): Playlist? = playlists.get(id) ?: server?.playlists?.value?.firstOrNull { it.id == id }
+    fun playlist(id: String): Playlist? = playlists.get(id) ?: server?.let { s ->
+        // A playlist made on the phone keeps its stand-in ID in open pages; the server gives another.
+        val real = s.playlistId(id)
+        s.playlists.value.firstOrNull { it.id == real }
+    }
 
     override fun onCreate() {
         super.onCreate()

@@ -71,6 +71,28 @@ interface MusicServer {
      * too (their songs kept on the phone play).
      */
     val playlists: StateFlow<List<Playlist>>
+
+    /** The server is set up and on: playlists live there (new ones are made there). */
+    val playlistsOnServer: Boolean
+    /** Playlist changes made on the phone not yet sent (the server out of reach). */
+    val pendingEdits: StateFlow<Int>
+    /** Something to tell the user about their playlists (changed elsewhere…), until cleared. */
+    val playlistNotice: StateFlow<String?>
+    fun clearPlaylistNotice()
+
+    // Changes to the user's own server playlists: shown at once, sent now or
+    // when the server can next be reached. Songs as server track IDs
+    // ([com.jimboyo.localbeat.library.Library.serverId]); positions count from 0.
+    /** Returns the new playlist's ID (a stand-in until the server gives one: see [playlistId]). */
+    fun createPlaylist(name: String, trackIds: List<String>): String
+    fun addToPlaylist(id: String, trackIds: List<String>)
+    fun removeFromPlaylist(id: String, positions: List<Int>)
+    /** The whole list in a new order. */
+    fun setPlaylistSongs(id: String, trackIds: List<String>)
+    fun renamePlaylist(id: String, name: String)
+    fun deletePlaylist(id: String)
+    /** The current ID of a playlist made on the phone (the server's, once it has been sent). */
+    fun playlistId(id: String): String
     /**
      * Whether server songs can play right now: the server is on, answering, and
      * allowed (not on mobile data with that turned off). While false, the lists

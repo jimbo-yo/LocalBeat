@@ -157,6 +157,14 @@ class Library(
     private val tracksByRelPath by lazy { tracks.associateBy { relativePath(it.path).lowercase(Locale.ROOT) } }
     private val tracksByName by lazy { tracks.groupBy { it.path.substringAfterLast('/').lowercase(Locale.ROOT) } }
 
+    /**
+     * The server's track ID for a song (to put it in a server playlist): its own
+     * if it's a server song, else the server song this phone copy stands in for;
+     * null if the server doesn't have it.
+     */
+    fun serverId(track: Track): String? = if (track.onServer) track.id else serverIdByPhoneId[track.id]
+    private val serverIdByPhoneId by lazy { standIns.entries.associate { (server, phone) -> phone to server } }
+
     /** A track by ID; a server song whose phone copy plays instead ([standIns]) gives that copy. */
     fun track(id: String): Track? = tracksById[id] ?: standIns[id]?.let(tracksById::get)
     fun album(id: String): Album? = albumsById[id]

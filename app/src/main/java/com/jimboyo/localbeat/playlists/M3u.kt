@@ -19,10 +19,14 @@ data class Playlist(
     /** Server playlists someone else shared (or made public): play only. */
     val readOnly: Boolean = false,
     val comment: String = "",
+    /** Server playlists: when the server last changed it (to notice changes made elsewhere). */
+    val changed: String = "",
 ) {
     /** The playlist's songs that can play now (entries for songs not here are kept but skipped). */
-    fun tracks(lib: Library): List<Track> =
-        if (onServer) entries.mapNotNull(lib::track) else entries.mapNotNull(lib::trackByRelativePath)
+    fun tracks(lib: Library): List<Track> = entries.mapNotNull { resolve(it, lib) }
+
+    /** One entry's song, if it can play now. */
+    fun resolve(entry: String, lib: Library): Track? = if (onServer) lib.track(entry) else lib.trackByRelativePath(entry)
 }
 
 /**

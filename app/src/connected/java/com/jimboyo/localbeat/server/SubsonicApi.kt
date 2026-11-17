@@ -63,6 +63,62 @@ internal class SubsonicApi(
         }
     }
 
+    /**
+     * Like [call], with [params] in a form POST body (OpenSubsonic `formPost`:
+     * a long song list doesn't fit a URL). The login stays in the URL.
+     */
+    fun post(method: String, params: List<Pair<String, String>>): JSONObject {
+        val c = open(URL(url(method)))
+        try {
+            c.connectTimeout = 8_000
+            c.readTimeout = 30_000
+            c.requestMethod = "POST"
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            c.outputStream.use { it.write(params.joinToString("&") { (k, v) -> "$k=${enc(v)}" }.toByteArray(Charsets.UTF_8)) }
+            val code = c.responseCode
+            val body = (if (code >= 400) c.errorStream else c.inputStream)?.use { String(it.readBytes(), Charsets.UTF_8) }.orEmpty()
+            if (code >= 400 && body.isBlank()) throw IOException("HTTP $code from the server")
+            return parseResponse(body)
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    /** Song lists by POST when the server takes it, else in the URL. */
+    private fun send(method: String, params: List<Pair<String, String>>, formPost: Boolean) =
+        if (formPost) post(method, params) else call(method, params)
+
+    /** One playlist with its songs, or null if it's gone (or no longer visible). */
+    fun playlist(id: String): JSONObject? = try {
+        call("getPlaylist", listOf("id" to id)).optJSONObject("playlist")
+    } catch (e: SubsonicException) {
+        if (e.code == 70) null else throw e
+    }
+
+    /** A new playlist; returns it (with its ID). */
+    fun createPlaylist(name: String, songIds: List<String>, formPost: Boolean): JSONObject =
+        send("createPlaylist", listOf("name" to name) + songIds.map { "songId" to it }, formPost).optJSONObject("playlist")
+            ?: throw IOException("The server didn't return the new playlist")
+
+    /** Replaces a playlist's songs (how a reorder is sent). */
+    fun setPlaylistSongs(id: String, songIds: List<String>, formPost: Boolean) {
+        send("createPlaylist", listOf("playlistId" to id) + songIds.map { "songId" to it }, formPost)
+    }
+
+    fun updatePlaylist(id: String, name: String? = null, add: List<String> = emptyList(), remove: List<Int> = emptyList(), formPost: Boolean) {
+        send(
+            "updatePlaylist",
+            listOf("playlistId" to id) + listOfNotNull(name?.let { "name" to it }) +
+                remove.map { "songIndexToRemove" to it.toString() } + add.map { "songIdToAdd" to it },
+            formPost,
+        )
+    }
+
+    fun deletePlaylist(id: String) {
+        call("deletePlaylist", listOf("id" to id))
+    }
+
     /** A quick "are you there?" for watching the connection: short timeouts, true if the server answered OK. */
     fun quickPing(): Boolean {
         val c = open(URL(url("ping")))
@@ -206,6 +262,7 @@ internal class SubsonicApi(
                 owner = owner,
                 readOnly = if (p.has("readonly")) p.optBoolean("readonly") else owner.isNotEmpty() && owner != username,
                 comment = p.optString("comment"),
+                changed = p.optString("changed"),
             )
         }
 
@@ -219,7 +276,7 @@ internal fun playlistsToJson(lists: List<Playlist>): String = JSONArray().apply 
     for (p in lists) put(
         JSONObject()
             .put("id", p.id).put("name", p.name).put("owner", p.owner)
-            .put("readOnly", p.readOnly).put("comment", p.comment)
+            .put("readOnly", p.readOnly).put("comment", p.comment).put("changed", p.changed)
             .put("entries", JSONArray(p.entries))
     )
 }.toString()
@@ -237,6 +294,7 @@ internal fun playlistsFromJson(text: String): List<Playlist> {
             owner = o.optString("owner"),
             readOnly = o.optBoolean("readOnly"),
             comment = o.optString("comment"),
+            changed = o.optString("changed"),
         )
     }
 }

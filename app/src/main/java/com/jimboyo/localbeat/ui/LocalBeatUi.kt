@@ -240,6 +240,7 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
     }
 
     ui.addToPlaylist?.let { tracks -> AddToPlaylistFlow(ui, tracks) }
+    PlaylistNotices(ui)
     }
 }
 

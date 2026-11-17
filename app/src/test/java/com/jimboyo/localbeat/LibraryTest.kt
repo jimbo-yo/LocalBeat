@@ -92,6 +92,30 @@ class LibraryTest {
         assertEquals(listOf(false, false, true), glory.tracks.map { it.onServer })
     }
 
+    /** Moving a phone playlist to the server: each song becomes the server's (docs/control.md step 5). */
+    @Test
+    fun phonePlaylistsMoveToTheServer() {
+        val hello = track("Oasis/Morning Glory/01. Oasis - Hello.opus", "Hello", "Oasis", "Morning Glory", n = 1)
+        val roll = track("Oasis/Morning Glory/02. Oasis - Roll With It.opus", "Roll With It", "Oasis", "Morning Glory", n = 2)
+        val phoneOnly = track("Mine/Demo/01. Me - Demo.opus", "Demo", "Me", "Demo", n = 1)
+        val server = listOf(
+            serverTrack("1", "Hello", "Oasis", "Morning Glory", 1),
+            // Not merged with the phone's copy (another album name), but at the same path.
+            serverTrack("2", "Roll With It", "Oasis", "Morning Glory (Remastered)", 2).copy(path = "server:Oasis/Morning Glory/02. Oasis - Roll With It.flac"),
+        )
+        val phone = listOf(hello, roll, phoneOnly)
+        val lib = Library(Library.merge(phone, server), Library.standIns(phone, server))
+        assertEquals("s1", lib.serverId(hello))
+        assertNull(lib.serverId(phoneOnly))
+
+        val p = com.jimboyo.localbeat.playlists.Playlist(
+            "x", "Mix", listOf("Oasis/Morning Glory/01. Oasis - Hello.opus", "Oasis/Morning Glory/02. Oasis - Roll With It.opus", "Mine/Demo/01. Me - Demo.opus", "Gone/x.opus"),
+        )
+        val r = com.jimboyo.localbeat.playlists.MoveToServer.serverSongs(p, lib, server)
+        assertEquals(listOf("s1", "s2"), r.trackIds)
+        assertEquals(listOf("Mine/Demo/01. Me - Demo.opus", "Gone/x.opus"), r.notFound)
+    }
+
     @Test
     fun mergeMatchesByMusicBrainzOrByTagsWhenThePhoneCopyLacksTheId() {
         val phone = listOf(track("Old/01.opus", "Track One", "Artist", "Album", n = 1)) // old rip, no MBID
