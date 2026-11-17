@@ -92,6 +92,36 @@ class LibraryTest {
         assertEquals(listOf(false, false, true), glory.tracks.map { it.onServer })
     }
 
+    /** Albums that came apart: a bonus track without the release ID, a compilation without an album artist. */
+    @Test
+    fun songsInOneFolderStayOneAlbum() {
+        fun s(id: String, path: String, title: String, artist: String, album: String, mbid: String = "") =
+            serverTrack(id, title, artist, album, 1, mbid).copy(path = "server:$path", albumArtist = artist)
+        val tracks = listOf(
+            // Enriched old album: the release ID on all but one song.
+            s("1", "Dido/No Angel/01 Here With Me.m4a", "Here With Me", "Dido", "No Angel", mbid = "5395286e"),
+            s("2", "Dido/No Angel/03 Don't Think of Me.m4a", "Don't Think of Me", "Dido", "No Angel", mbid = "5395286e"),
+            s("3", "Dido/No Angel/02 Hunter.m4a", "Hunter", "Dido", "No Angel"),
+            // A compilation: each song's artist as its album artist.
+            s("4", "Compilations/Water Music/01.mp3", "Ste No.1 in F", "Handel", "Water Music"),
+            s("5", "Compilations/Water Music/02.mp3", "Ste No.2 in D", "Lentement", "Water Music"),
+            s("6", "Compilations/Water Music/03.mp3", "Ste No.3 in G", "Menuet", "Water Music"),
+            // Two releases in one folder stay apart.
+            s("7", "Destiny's Child/Survivor.m4a", "Survivor", "Destiny's Child", "Survivor", mbid = "5dd0e560"),
+            s("8", "Destiny's Child/Bootylicious.m4a", "Bootylicious", "Destiny's Child", "Survivor", mbid = "efb2e63e"),
+            // Same title elsewhere (another folder, another artist): another album.
+            s("9", "Somebody/No Angel/01.mp3", "No Angel", "Somebody", "No Angel"),
+        )
+        val lib = Library(tracks)
+        val noAngel = lib.albums.filter { it.title == "No Angel" }
+        assertEquals(2, noAngel.size)
+        assertEquals(listOf("Here With Me", "Don't Think of Me", "Hunter").sorted(), noAngel.first { it.artist == "Dido" }.tracks.map { it.title }.sorted())
+        val water = lib.albums.single { it.title == "Water Music" }
+        assertEquals(3, water.tracks.size)
+        assertEquals(Library.VARIOUS_ARTISTS, water.artist)
+        assertEquals(2, lib.albums.count { it.title == "Survivor" })
+    }
+
     /** Moving a phone playlist to the server: each song becomes the server's (docs/control.md step 5). */
     @Test
     fun phonePlaylistsMoveToTheServer() {

@@ -101,9 +101,9 @@ class Library(
         this.tracks = tracks.sortedWith(compareBy { SortKey.of(it.title) })
         tracksById = tracks.associateBy { it.id }
 
-        val albumGroups = tracks.filter { it.album.isNotBlank() }.groupBy(::albumKey)
+        val albumGroups = groupAlbums(tracks)
         val albums = albumGroups.map { (key, group) ->
-            val artistName = mostCommon(group.map { it.filedUnder }).ifBlank { UNKNOWN_ARTIST }
+            val artistName = albumArtistOf(group).ifBlank { UNKNOWN_ARTIST }
             Album(
                 id = "a" + shortHash(key),
                 title = mostCommon(group.map { it.album }),
@@ -177,6 +177,7 @@ class Library(
 
     companion object {
         const val UNKNOWN_ARTIST = "Unknown artist"
+        const val VARIOUS_ARTISTS = "Various Artists"
         val EMPTY = Library(emptyList())
 
         fun artistId(name: String) = "r" + shortHash(fold(name))
@@ -226,6 +227,57 @@ class Library(
             return albums.flatMap { a ->
                 listOfNotNull(a + "\u0000title:" + fold(t.title), if (t.trackNumber > 0) a + "\u0000#${t.discNumber}.${t.trackNumber}" else null)
             }
+        }
+
+        /**
+         * Songs into albums: one MusicBrainz release when tagged, else album artist +
+         * album title ([albumKey]); then groups that share a folder and album title
+         * are one album, unless that would join two releases. That keeps together an
+         * old album where `localbeat enrich` gave the release ID to all but a bonus
+         * track or two (Dido's "No Angel" and "Hunter"), and a compilation with no
+         * album artist (one group per performer otherwise). Keyed by the release
+         * when there is one, else the biggest group's key.
+         */
+        internal fun groupAlbums(tracks: List<Track>): Map<String, List<Track>> {
+            val byKey = tracks.filter { it.album.isNotBlank() }.groupBy(::albumKey)
+            val parent = HashMap<String, String>().apply { byKey.keys.forEach { put(it, it) } }
+            fun root(k: String): String {
+                var r = k
+                while (parent.getValue(r) != r) r = parent.getValue(r)
+                parent[k] = r
+                return r
+            }
+            val releases = HashMap<String, Int>().apply { byKey.keys.forEach { put(it, if (it.startsWith("mb:")) 1 else 0) } }
+            val byPlace = HashMap<String, MutableList<String>>()
+            for ((key, group) in byKey) {
+                for (place in group.mapNotNull(::placeKey).toSet()) byPlace.getOrPut(place) { ArrayList() } += key
+            }
+            for (keys in byPlace.values) for (k in keys.drop(1)) {
+                val (a, b) = root(keys[0]) to root(k)
+                if (a == b || releases.getValue(a) + releases.getValue(b) > 1) continue
+                parent[b] = a
+                releases[a] = releases.getValue(a) + releases.getValue(b)
+            }
+            return byKey.entries.groupBy({ root(it.key) }, { it }).values.associate { parts ->
+                val key = parts.firstOrNull { it.key.startsWith("mb:") }?.key
+                    ?: parts.maxWith(compareBy<Map.Entry<String, List<Track>>>({ it.value.size }, { it.key })).key
+                key to parts.flatMap { it.value }
+            }
+        }
+
+        /** Where a song is: its folder (relative to Music/, or the server's library) + album title. */
+        private fun placeKey(t: Track): String? {
+            val rel = if (t.path.startsWith("server:")) t.path.removePrefix("server:") else relativePath(t.path)
+            val folder = rel.substringBeforeLast('/', "").lowercase(Locale.ROOT)
+            return if (folder.isEmpty()) null else folder + "\u0000" + fold(t.album)
+        }
+
+        /** The album's artist: the most common, or "Various Artists" when none is most of it. */
+        private fun albumArtistOf(group: List<Track>): String {
+            val names = group.map { it.filedUnder }
+            val counts = names.groupingBy { fold(it) }.eachCount()
+            if (counts.size > 1 && counts.values.max() * 2 <= names.size) return VARIOUS_ARTISTS
+            return mostCommon(names)
         }
 
         /** One album = one MusicBrainz release when tagged, else album artist + album title. */
