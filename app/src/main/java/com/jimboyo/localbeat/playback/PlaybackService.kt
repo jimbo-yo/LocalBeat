@@ -380,7 +380,11 @@ class PlaybackService : MediaLibraryService() {
         override fun onSearch(
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String, params: LibraryParams?,
         ): ListenableFuture<LibraryResult<Void>> = scope.future {
+            // Logged to find why search didn't work in Android Auto (2026-11-17): who asks, what, how many.
+            val started = android.os.SystemClock.elapsedRealtime()
             val count = tree.search(query, app.library.awaitShown()).size
+            android.util.Log.i("LocalBeat", "Search from ${browser.packageName} (trusted ${browser.isTrusted}, v${browser.controllerVersion}): " +
+                "\"$query\" -> $count results in ${android.os.SystemClock.elapsedRealtime() - started} ms")
             session.notifySearchResultChanged(browser, query, count, params)
             LibraryResult.ofVoid()
         }
@@ -389,7 +393,9 @@ class PlaybackService : MediaLibraryService() {
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, query: String,
             page: Int, pageSize: Int, params: LibraryParams?,
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = scope.future {
-            LibraryResult.ofItemList(tree.search(query, app.library.awaitShown()).page(page, pageSize), params)
+            val items = tree.search(query, app.library.awaitShown()).page(page, pageSize)
+            android.util.Log.i("LocalBeat", "Search results to ${browser.packageName}: \"$query\" page $page size $pageSize -> ${items.size} items")
+            LibraryResult.ofItemList(items, params)
         }
 
         /** "Add to queue": albums and artists add all their songs. */
