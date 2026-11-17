@@ -2,7 +2,9 @@
 
 Written 2026-11-12 (adb-only, before the server existed); **revised
 2026-11-17** now that the music server runs on the Mac Mini. Status: design
-agreed 2026-11-17. Done: step 1 (server playlists, on the Mac) and step 2 (Studio's `localbeat playlist` and `localbeat match`).
+agreed 2026-11-17. Done: step 1 (server playlists, on the Mac), step 2
+(Studio's `localbeat playlist` and `localbeat match`) and step 3
+(`localbeat mcp`).
 
 ## The idea
 
@@ -190,28 +192,35 @@ catalogue for its Library page, `server_library.rs`):
 
 ## 3. `localbeat mcp` (Studio's CLI)
 
-An MCP server over stdio, `claude mcp add localbeat -- localbeat mcp`. Small,
-hand-written JSON-RPC (initialize, tools/list, tools/call) on `serde_json`;
-no MCP SDK unless that turns out simpler. Uses the `server` login from
-`localbeat.json` and the catalogue cache.
+An MCP server over stdio, `claude mcp add localbeat -- localbeat mcp`
+(built 2026-11-17, CDRipPipeline `cli/src/mcp_cmd.rs`). Small, hand-written
+JSON-RPC (initialize, ping, tools/list, tools/call; one message per line) on
+`serde_json`, no MCP SDK. Uses this computer's music server login
+(`localbeat.json` `server`); reads the whole library once (songs + albums,
+for original years; again after 10 minutes). Its `instructions` tell the AI
+the workflow: match first, tell the user what's found and missing, then
+create; ask before deleting.
 
 | Tool | What | Changes things |
 |---|---|---|
-| `library_summary` | Counts, genres, decades, artists with album counts | |
-| `search` | Text search (artist, album, title), with filters genre/decade | |
-| `list_songs` | Compact lines (id, artist, title, year, genres), paged and filterable: the whole library is ~80k tokens, so filtered | |
-| `match_songs` | Lines in → matches out (section 2) | |
-| `list_playlists`, `get_playlist` | | |
-| `create_playlist` | name, comment, song IDs | yes |
-| `add_to_playlist`, `remove_from_playlist`, `reorder_playlist`, `rename_playlist` | | yes |
-| `delete_playlist` | | yes (asks the AI to confirm with the user in its description) |
+| `library_summary` | Songs, albums, artists, hours, formats, songs per decade (original release), top 40 genres, top 30 artists | |
+| `list_artists` | Every artist with song count; `genre`, `min_songs` filters | |
+| `search_songs` | `query`, `artist`, `album`, `genre`, `decade` ("70s"), `year_from`/`year_to`; compact lines `id \| artist \| title \| album \| year \| genres \| length`, paged (100, max 500) | |
+| `match_songs` | Lines in → found / close / not_found with up to 3 songs each (section 2) | |
+| `list_playlists`, `get_playlist` | Summaries; one playlist's songs as numbered lines | |
+| `create_playlist` | name, song IDs in order, comment | yes |
+| `add_to_playlist`, `remove_from_playlist` (positions from 1), `set_playlist_songs` (replace / reorder), `rename_playlist` (name, comment), `share_playlist` (users, public) | Playlists named by ID or exact name | yes |
+| `delete_playlist` | Description says to ask the user first | yes |
+| `list_users` | Who to share with | |
 
-Typical use: the AI reads a web page of road-trip songs, calls
-`match_songs`, shows what's here and what isn't, then `create_playlist`.
+Tried 2026-11-17 by driving it as a client: Time Out's "50 best road-trip
+songs" → `match_songs` (9 found, 41 not here: checked by hand) →
+`create_playlist` "Road trip (Time Out 50)". Not yet tried from Claude
+Code itself (no `claude` command on the Windows laptop then).
 
 The same commands also exist for people and scripts: `localbeat playlist
-[list|show|new|add|remove|rm]` and `localbeat match < list.txt`, JSON with
-`--json`.
+[list|show|new|add|remove|move|rename|share|delete|users]` and `localbeat
+match FILE|-`, JSON with `--json`.
 
 ## 4. The phone (Connected edition)
 
