@@ -278,9 +278,39 @@ match FILE|-`, JSON with `--json`.
 - Studio already joins as a device of a user (`docs/joining.md`); the join
   request asks which user.
 
-## Live control on the phone (later; from the 2026-11-12 plan)
+## Live control on the phone (step 7: built 2026-11-17)
 
-Unchanged in substance, moved after playlists:
+**As built** (0.9.11-0.9.15; `playback/ControlProvider.kt`, CDRipPipeline
+`localbeat player …` in `cli/src/player_cmd.rs`, `control_call` in
+`platform/src/phone.rs`, MCP tools `phone_now_playing`, `phone_play`,
+`phone_control`):
+
+- Methods: `version` (api_version 1), `status`, `play [media ID | words]`,
+  `pause`, `toggle`, `next`, `prev`, `seek 1:30`, `shuffle on|off`,
+  `repeat off|all|one`, `queue`, `playlists`. Reply: one JSON string in
+  the Bundle's `json`. Callers other than uid 2000 (shell) and 0 refused.
+  `localbeat player play NAME` looks the playlist up by name, else searches
+  (as a voice request).
+- A provider is created before `Application.onCreate`: each call first
+  waits for the main thread (else "lateinit … playlists").
+- Each call connects a MediaController and lets it go; a service that
+  isn't playing then stops, and the next call starts it again (the saved
+  queue is restored). Status says "paused" for a restored, buffering queue.
+- **Starting playback from the background on Android 17** (Pixel 9),
+  proven 2026-11-17: (1) starting the music service from the background
+  is refused ("startForegroundService() not allowed"): the CLI first runs
+  `cmd deviceidle tempwhitelist -d 60000 com.jimboyo.localbeat` (adb may),
+  then the service is allowed; (2) "audio hardening" blocks the first
+  audio focus request (it comes a moment before the service is in the
+  foreground): the provider waits 1.5 s and, if not playing, pauses, waits
+  0.4 s and plays again (pause+play at once asks for nothing). Then it
+  plays: tried from a cold start (Aimee Mann, 26 songs).
+- Known: a search that finds nothing while a queue is there leaves that
+  queue and reports it (no "nothing matches" then); `watch` not built.
+- Android Studio's Run installs a debug-signed build: switching between it
+  and release builds needs an uninstall, which wipes the app's data.
+
+The plan as written before building:
 
 - An exported `ContentProvider` (`content://com.jimboyo.localbeat.control`),
   only `call(method, arg, extras)`, refusing every caller but adb's shell

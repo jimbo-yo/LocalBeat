@@ -74,6 +74,12 @@
             tools:ignore="ExportedContentProvider" />
 
         <!-- Hands shared playlist files to the app they're shared with. -->
+        <!-- Control from a computer over adb (docs/control.md step 7): callers other
+             than adb's shell user and root are refused in the provider itself. -->
+        <provider
+            android:name=".playback.ControlProvider"
+            android:authorities="${applicationId}.control"
+            android:exported="true" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

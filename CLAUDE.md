@@ -191,7 +191,7 @@ decisions, 2026-11-17):
   "Shared with you" (Make a copy), "Only on this phone" (Move to the music
   server))
   `localbeat mcp`, 4 phone shows/plays server playlists, 5 phone edits
-  them, 6 Studio's Library page (done 2026-11-17: a Playlists page, Add to playlist on songs and albums), 7 live control over adb
+  them, 6 Studio's Library page (done 2026-11-17: a Playlists page, Add to playlist on songs and albums), 7 live control over adb (done 2026-11-17, 0.9.11-0.9.15: `playback/ControlProvider.kt`, adb only; see docs/control.md for the Android 17 background-start workarounds)
   (`localbeat player …` via a content provider that refuses all callers but
   the shell user, as planned 2026-11-12)
 - **Metadata after that:** play history on the phone (counts, last played,
