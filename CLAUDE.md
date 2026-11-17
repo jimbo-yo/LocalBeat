@@ -176,8 +176,9 @@ decisions, 2026-11-17):
 - `localbeat mcp` (Studio's CLI, stdio) gives an AI tools against the
   server: search, `match_songs` (artist – title lines → song IDs), playlist
   create/edit. No phone needed.
-- Order: 1 server playlists (built, LocalBeatServer branch `playlists`),
-  1b devices → users on the Mac, 2 Studio CLI `playlist`/`match`, 3
+- Order: 1 server playlists (built, LocalBeatServer branch `playlists`, on
+  the Mac 2026-11-17), 1b devices → users on the Mac, 2 Studio CLI
+  `playlist`/`match` (done 2026-11-17), 3
   `localbeat mcp`, 4 phone shows/plays server playlists, 5 phone edits
   them, 6 Studio's Library page, 7 live control over adb
   (`localbeat player …` via a content provider that refuses all callers but

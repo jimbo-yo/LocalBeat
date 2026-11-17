@@ -2,7 +2,7 @@
 
 Written 2026-11-12 (adb-only, before the server existed); **revised
 2026-11-17** now that the music server runs on the Mac Mini. Status: design
-agreed piece by piece; step 1 (playlists on the server) is being built.
+agreed 2026-11-17. Done: step 1 (server playlists, on the Mac) and step 2 (Studio's `localbeat playlist` and `localbeat match`).
 
 ## The idea
 
