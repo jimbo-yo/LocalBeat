@@ -7,7 +7,13 @@ agreed 2026-11-17. Done: step 1 (server playlists, on the Mac), step 2
 (`localbeat mcp`) and step 4 (LocalBeat 0.9.7 shows and plays server
 playlists: seen on the Pixel 9 with the playlist made through
 `localbeat mcp`; keeping its songs for offline and Android Auto are built
-and unit-tested but not yet tried on the phone or in the car).
+and unit-tested but not yet tried on the phone or in the car) and step 5
+(0.9.8-0.9.9: editing on the phone, queued while out of reach, moving the
+phone's playlists in, copying shared ones; a song added on the phone showed
+in `localbeat playlist show` at once, one added in airplane mode arrived
+after reconnecting). Queued changes go as soon as the server answers
+(0.9.9), not after the 2-minute steadiness rule that decides when music
+streams again (`ConnectionGate`, STEADY_MS); "Try now" skips it.
 
 ## The idea
 

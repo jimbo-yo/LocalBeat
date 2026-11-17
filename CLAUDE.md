@@ -183,7 +183,13 @@ decisions, 2026-11-17):
   and saved in `server-playlists.json`; `Playlist.onServer` entries are
   server track IDs; `Library.standIns` maps a server song merged away to
   its phone copy; Playlists tab section "On the music server", read-only
-  page; Android Auto via `LocalBeatApp.allPlaylists()`)
+  page; Android Auto via `LocalBeatApp.allPlaylists()`), 5 (done
+  2026-11-17, 0.9.8/0.9.9: `server/PlaylistEdits.kt` queue saved in
+  `server-playlist-edits.json`, shown on top of the server's list, sent in
+  order; a playlist changed elsewhere (its `changed` differs) keeps the
+  server's version; `playlists/MoveToServer.kt`; Playlists tab: yours,
+  "Shared with you" (Make a copy), "Only on this phone" (Move to the music
+  server))
   `localbeat mcp`, 4 phone shows/plays server playlists, 5 phone edits
   them, 6 Studio's Library page, 7 live control over adb
   (`localbeat player …` via a content provider that refuses all callers but

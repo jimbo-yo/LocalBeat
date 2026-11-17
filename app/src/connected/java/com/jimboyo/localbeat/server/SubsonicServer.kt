@@ -267,10 +267,14 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         sendJob = scope.launch { sendEdits() }
     }
 
-    /** Sends the waiting edits in order while the server answers; stops (to retry later) when it doesn't. */
+    /**
+     * Sends the waiting edits in order while the server answers; stops (to retry
+     * later) when it doesn't. Doesn't wait to count as connected (the steadiness
+     * rule is for music); only "not on mobile data" applies, as for everything.
+     */
     private fun sendEdits() {
         val a = api ?: return
-        if (!_connected.value) return
+        if (meteredBlock() != null) return
         val songIds = _tracks.value.associate { it.id to it.serverSongId }
         fun ids(trackIds: List<String>) = trackIds.mapNotNull { songIds[it] }
         while (true) {
@@ -619,6 +623,9 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
                     if (!_connected.value && gate.onSuccess(SystemClock.elapsedRealtime())) {
                         if (!fetched) fetch() else setConnected(true)
                     }
+                    // Playlist changes are tiny: send them as soon as the server
+                    // answers, without waiting for the steadiness rule (that's for music).
+                    startSending()
                 } else if (_connected.value) {
                     // One lost answer isn't enough: ask again shortly.
                     delay(RECHECK_MS)
