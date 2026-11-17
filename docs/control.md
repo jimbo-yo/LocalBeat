@@ -357,7 +357,7 @@ Each step ends with something that works.
    phone's own playlists in.**
    *Done when:* a song added on the phone shows in Studio's `localbeat
    playlist show`, and one added in airplane mode arrives once back.
-6. **Studio Library page: the same playlists.**
+6. **Studio Library page: the same playlists.** Done 2026-11-17 (CDRipPipeline `gui/src/playlists_ui.rs`): online only, no queue for when the server is out of reach yet.
 7. **Live control on the phone** (adb), as above, then MCP tools for it.
 
 After that: play history, tempo/energy, lyrics.
