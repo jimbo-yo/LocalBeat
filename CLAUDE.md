@@ -157,23 +157,31 @@ edition adds the network and a "Use remote server" checkbox.
   music server?" before changing Settings, and warns that songs kept on the
   phone are tied to the old address + user (track IDs hash both)
 
-## Control from a computer and AI (planned 2026-11-12, nothing built)
+## AI control and playlists (revised 2026-11-17; server step being built)
 
-Design and plan: **`docs/control.md`** (read it first; start a fresh session
-for it). In short:
+Design and plan: **`docs/control.md`** (read it first). In short (user's
+decisions, 2026-11-17):
 
-- `localbeat player …` (in LocalBeat Studio's `localbeat` CLI, CDRipPipeline
-  `app/cli`, recommended) drives the app over **adb** through a content
-  provider that refuses every caller but the shell user: real-time control,
-  library, search, queue, playlists, `watch`. JSON out, versioned contract.
-  Both editions; no sockets, so the offline edition stays offline
-- `localbeat mcp` on top (stdio), so an AI can use it as tools ("play me
-  some great driving songs"): the AI's own knowledge picks the songs, and a
-  `match` command says which ones are in the library
-- **Seven steps**, each working on its own: 1 contract
-  (`docs/control-api.md`), 2 control channel on the phone (prove playback
-  can start while the app is closed first), 3 the laptop CLI, 4 library,
-  search, `match` and queue, 5 playlists, 6 `watch`, 7 `localbeat mcp`
+- **Playlists live on the music server** (LocalBeatServer), through the
+  standard Subsonic playlist calls, so one playlist shows on the phone, in
+  Studio and to an AI. The phone's own `PlaylistStore` stays for the offline
+  edition and Connected with no server.
+- **Devices belong to users:** each login (`my-phone`, `my-windows-pc`…) is a
+  device of one user (the server's users file); a user's playlists are the
+  same on all their devices. With a server, the Connected edition's
+  playlists *are* the user's server playlists (kept for offline, changes
+  queued while out of reach; phone playlists moved in once). Shared with
+  other users or everyone: view, play, copy only. Extensions to check:
+  `formPost`, `localbeatPlaylistSharing`.
+- `localbeat mcp` (Studio's CLI, stdio) gives an AI tools against the
+  server: search, `match_songs` (artist – title lines → song IDs), playlist
+  create/edit. No phone needed.
+- Order: 1 server playlists (built, LocalBeatServer branch `playlists`),
+  1b devices → users on the Mac, 2 Studio CLI `playlist`/`match`, 3
+  `localbeat mcp`, 4 phone shows/plays server playlists, 5 phone edits
+  them, 6 Studio's Library page, 7 live control over adb
+  (`localbeat player …` via a content provider that refuses all callers but
+  the shell user, as planned 2026-11-12)
 - **Metadata after that:** play history on the phone (counts, last played,
   skips), then tempo/energy measured offline on the laptop (e.g. Essentia),
   then lyrics from LRCLIB fetched by Studio into `.lrc` files. Rule: the
