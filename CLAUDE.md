@@ -177,7 +177,7 @@ decisions, 2026-11-17):
   server: search, `match_songs` (artist – title lines → song IDs), playlist
   create/edit. No phone needed.
 - Order: 1 server playlists (built, LocalBeatServer branch `playlists`, on
-  the Mac 2026-11-17), 1b devices → users on the Mac, 2 Studio CLI
+  the Mac 2026-11-17), 1b devices → users (done 2026-11-17: localbeat-people --user, admin page "whose device?", Studio "Whose computer"), 2 Studio CLI
   `playlist`/`match` (done 2026-11-17), 3 (done 2026-11-17), 4 (done
   2026-11-17, 0.9.7: `MusicServer.playlists`, fetched with the catalogue
   and saved in `server-playlists.json`; `Playlist.onServer` entries are
