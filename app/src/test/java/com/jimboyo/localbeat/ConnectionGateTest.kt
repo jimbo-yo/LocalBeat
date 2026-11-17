@@ -55,6 +55,32 @@ class ConnectionGateTest {
         assertTrue(g.onSuccess(3_600_000))
     }
 
+    @Test fun newWifiReconnectsAtOnce() {
+        // Airplane mode at home: lost, then Wi-Fi again; the tunnel needs a few tries.
+        val g = ConnectionGate(steady)
+        g.connectNow()
+        g.onFailure(0)
+        g.onFailure(15_000)
+        g.newNetwork(20_000)
+        g.onFailure(21_000) // tunnel not up yet
+        assertTrue("first answer on the new network", g.onSuccess(30_000))
+        assertTrue(g.connected)
+    }
+
+    @Test fun newNetworkOnlyForAWhile() {
+        val g = ConnectionGate(steady)
+        g.connectNow()
+        g.onFailure(0)
+        g.newNetwork(10_000)
+        g.onFailure(50_000)
+        // No answer within a minute: back to the steadiness rule.
+        assertFalse(g.onSuccess(71_000))
+        assertTrue(g.onSuccess(50_000 + steady))
+        // Used once: a later dropout waits again.
+        g.onFailure(200_000)
+        assertFalse(g.onSuccess(210_000))
+    }
+
     @Test fun connectNowSkipsTheWait() {
         val g = ConnectionGate(steady)
         g.onFailure(0)

@@ -13,7 +13,10 @@ phone's playlists in, copying shared ones; a song added on the phone showed
 in `localbeat playlist show` at once, one added in airplane mode arrived
 after reconnecting). Queued changes go as soon as the server answers
 (0.9.9), not after the 2-minute steadiness rule that decides when music
-streams again (`ConnectionGate`, STEADY_MS); "Try now" skips it.
+streams again (`ConnectionGate`, STEADY_MS); "Try now" skips it. Since
+0.9.10 (user, 2026-11-17) joining Wi-Fi or a wired network (airplane mode
+off, arriving home) reconnects on the first answer within a minute
+(`ConnectionGate.newNetwork`); mobile-data dropouts still wait 2 minutes.
 
 ## The idea
 

@@ -78,6 +78,8 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     // ---- the connection: connected or not, with a steadiness rule ----
     private val gate = ConnectionGate(STEADY_MS)
+    /** The default network is Wi-Fi (or wired) as last seen; see the network callback. */
+    @Volatile private var onWifi = true
     private val _connected = MutableStateFlow(false)
     override val connected: StateFlow<Boolean> = _connected.asStateFlow()
     /** The last successful connection's details, shown again on reconnecting. */
@@ -119,8 +121,22 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         // Downloads waiting for Wi-Fi (or for the server) carry on when the network changes.
         connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: android.net.Network) { kick.trySend(Unit); resumeDownloads() }
-            override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) { kick.trySend(Unit); resumeDownloads() }
-            override fun onLost(network: android.net.Network) { kick.trySend(Unit) }
+            override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
+                // Just joined Wi-Fi (airplane mode off, arriving home): reconnect on the first
+                // answer, not after the steadiness wait (that's for mobile-data dropouts).
+                // Through WireGuard the caps list the network underneath too.
+                val wifi = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                    caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+                if (wifi && !onWifi) {
+                    gate.newNetwork(SystemClock.elapsedRealtime())
+                    // The tunnel may need a moment: ask now and again shortly.
+                    scope.launch { delay(5_000); kick.trySend(Unit) }
+                }
+                onWifi = wifi
+                kick.trySend(Unit)
+                resumeDownloads()
+            }
+            override fun onLost(network: android.net.Network) { onWifi = false; kick.trySend(Unit) }
         })
     }
 
