@@ -215,8 +215,11 @@ create; ask before deleting.
 
 Tried 2026-11-17 by driving it as a client: Time Out's "50 best road-trip
 songs" → `match_songs` (9 found, 41 not here: checked by hand) →
-`create_playlist` "Road trip (Time Out 50)". Not yet tried from Claude
-Code itself (no `claude` command on the Windows laptop then).
+`create_playlist` "Road trip (Time Out 50)". Registered on the Surface
+(Windows) at user scope with the desktop app's bundled `claude.exe` (`claude
+mcp add --scope user localbeat -- "%LOCALAPPDATA%\Programs\LocalBeat
+Studio\localbeat.exe" mcp`); a `claude -p` question listed the playlists
+and matched three songs correctly.
 
 The same commands also exist for people and scripts: `localbeat playlist
 [list|show|new|add|remove|move|rename|share|delete|users]` and `localbeat
