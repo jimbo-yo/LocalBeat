@@ -17,6 +17,7 @@ streams again (`ConnectionGate`, STEADY_MS); "Try now" skips it. Since
 0.9.10 (user, 2026-11-17) joining Wi-Fi or a wired network (airplane mode
 off, arriving home) reconnects on the first answer within a minute
 (`ConnectionGate.newNetwork`); mobile-data dropouts still wait 2 minutes.
+Tried on the Pixel 9: after airplane mode it reconnected by itself.
 
 ## The idea
 
