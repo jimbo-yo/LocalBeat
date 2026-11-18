@@ -33,9 +33,34 @@ data class Track(
     val filedUnder: String get() = albumArtist.ifBlank { artist }
     /** Only on the music server (Connected edition), not on the phone. */
     val onServer: Boolean get() = serverSongId.isNotEmpty()
+    /**
+     * The file type, for Now Playing ("Opus", "AAC"…). A server song is played as
+     * the Opus the server makes from its file, so it says both: "Opus from FLAC".
+     */
+    val format: String get() {
+        val source = formatOf(path)
+        return if (!onServer) source else if (source.isEmpty() || source == "Opus") "Opus" else "Opus from $source"
+    }
 
     companion object {
         fun idForPath(path: String) = "t" + shortHash(path)
+
+        /** A file type's usual name, from the file name's extension ("" if it has none). */
+        fun formatOf(path: String): String {
+            val name = path.substringAfterLast('/')
+            if ('.' !in name) return ""
+            return when (val ext = name.substringAfterLast('.').lowercase()) {
+                "opus" -> "Opus"
+                "ogg", "oga" -> "Ogg Vorbis"
+                "m4a", "aac", "mp4" -> "AAC"
+                "mp3" -> "MP3"
+                "flac" -> "FLAC"
+                "wav" -> "WAV"
+                "alac" -> "ALAC"
+                "wma" -> "WMA"
+                else -> ext.uppercase()
+            }
+        }
     }
 }
 

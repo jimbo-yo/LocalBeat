@@ -34,6 +34,17 @@ class LibraryTest {
     }
 
     @Test
+    fun fileFormats() {
+        assertEquals("Opus", lib.tracks.first { it.title == "Good Times Bad Times" }.format)
+        assertEquals("MP3", lib.tracks.first { it.title == "Loose" }.format)
+        assertEquals("AAC", Track.formatOf("/x/Artist - Album/01 - Song.M4A"))
+        assertEquals("", Track.formatOf("/x/v1.2 folder/no-extension"))
+        val server = track("a.opus", "S", "A", "B").copy(path = "server:Artist/Album/01 S.flac", serverSongId = "42")
+        assertEquals("Opus from FLAC", server.format)
+        assertEquals("Opus", server.copy(path = "server:42").format)
+    }
+
+    @Test
     fun genresAndDecades() {
         assertEquals(listOf("Hard Rock", "Rock"), lib.genres.map { it.name })
         assertEquals(2, lib.genres.first { it.name == "Rock" }.albums.size)
