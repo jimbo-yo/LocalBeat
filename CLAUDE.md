@@ -40,7 +40,14 @@ and LocalBeat Studio.)
   `{"albums": {"Artist/Album": {"source": "flac:Artist/Album" | "misc:...",
   "files": {...}}}}`. `flac:` = ripped from CD (verified), `misc:` = older
   copy. Albums missing from it (loose files, put on by hand) are unknown.
-  Use this to badge/filter albums; don't guess from tags
+  Use this to badge/filter albums; don't guess from tags. The app can't read
+  it (READ_MEDIA_AUDIO covers audio files only), so Studio's sync (over adb,
+  on connecting and after each sync) also writes a digest the app reads,
+  `Android/data/com.jimboyo.localbeat/files/sources.json`: album folder →
+  `{"from": "cd"}` or `{"from": "old", "format": "MP3"}` (`library/Sources.kt`).
+  Shown as coloured pills like Studio's (`ui/SourcePills.kt`): CD RIP green,
+  OLD MP3 amber, OLD AAC magenta, ON THE SERVER violet, the file type grey.
+  Server songs: FLAC = CD rip (the server's FLAC library wins)
 
 - `Music/Artist/Album/NN. Artist - Title.opus`; multi-disc albums share one
   folder: `1.07. Artist - Title.opus`. Older fre:ac rips: `Music/Artist -

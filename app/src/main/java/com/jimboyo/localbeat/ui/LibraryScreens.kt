@@ -153,6 +153,7 @@ fun AlbumPage(ui: Ui, lib: Library, album: Album) {
                     listOfNotNull(album.year.takeIf { it > 0 }?.toString(), album.genres.firstOrNull(), plural(album.tracks.size, "song"), duration(album.durationMs)).joinToString(" · "),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                SourcePills(album, Modifier.padding(top = 8.dp))
             }
             PlayButtons(
                 onPlay = { ui.player.play(albumId) }, onShuffle = { ui.player.play(albumId, shuffled = true) },

@@ -194,13 +194,14 @@ class BrowseTree(
 
     /**
      * A playable queue entry for a track, with the URI ExoPlayer plays. Its
-     * display lines (what Android Auto's playing screen shows) add the file type
-     * to the artist: "Artist · Opus". Browse lists keep the plain artist.
+     * display lines (what Android Auto's playing screen shows) add where it came
+     * from to the artist: "Artist · CD rip", "Artist · old MP3". Browse lists
+     * keep the plain artist.
      */
     fun queueItem(track: Track, lib: Library): MediaItem {
         val item = trackItem(track, lib)
         val m = item.mediaMetadata
-        val subtitle = listOfNotNull(m.artist?.toString()?.ifBlank { null }, track.format.ifBlank { null }).joinToString(" · ")
+        val subtitle = listOfNotNull(m.artist?.toString()?.ifBlank { null }, track.sourceLabel.ifBlank { null }).joinToString(" · ")
         return item.buildUpon().setMediaMetadata(
             m.buildUpon()
                 // Auto reads the display title/subtitle/description together, so set all three.

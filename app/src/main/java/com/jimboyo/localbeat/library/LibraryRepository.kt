@@ -196,10 +196,31 @@ class LibraryRepository(private val context: Context) {
         _generation.value++
     }
 
+    private val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).path
+    /** Studio's word on where each album came from ([Sources]), re-read when the file changes. */
+    private var sources: Map<String, Origin> = emptyMap()
+    private var sourcesStamp = -1L
+
+    private fun readSources(): Map<String, Origin> {
+        // getExternalFilesDir also makes the folder, owned by this app, for Studio to write into.
+        val file = runCatching { context.getExternalFilesDir(null) }.getOrNull()?.let { File(it, "sources.json") }
+        val stamp = file?.takeIf { it.isFile }?.let { it.lastModified() xor it.length() } ?: 0L
+        if (stamp != sourcesStamp) {
+            sourcesStamp = stamp
+            sources = if (stamp == 0L) emptyMap() else runCatching { Sources.parse(file!!.readText()) }.getOrDefault(emptyMap())
+            Log.i(TAG, "Album sources from Studio: ${sources.size}")
+        }
+        return sources
+    }
+
     @Synchronized
-    private fun publish(phone: List<Track>) {
-        phoneTracks = phone
-        val all = Library(Library.merge(phone, serverTracks), Library.standIns(phone, serverTracks))
+    private fun publish(phoneTracks: List<Track>) {
+        val albums = readSources()
+        fun List<Track>.withOrigins() = map { t -> Sources.originOf(t, musicDir, albums).let { if (it == t.origin) t else t.copy(origin = it) } }
+        val phone = phoneTracks.withOrigins()
+        val server = serverTracks.withOrigins()
+        this.phoneTracks = phoneTracks
+        val all = Library(Library.merge(phone, server), Library.standIns(phone, server))
         _library.value = all
         _shown.value =
             if ((serverConnected && !_onPhoneOnly.value) || all.tracks.none { it.onServer }) all

@@ -382,7 +382,7 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
                 }
             }
             Column(Modifier.padding(start = 12.dp)) {
-                Progress(p) { pos, dur -> SeekBar(p, pos, dur, track?.format.orEmpty()) }
+                Progress(p) { pos, dur -> SeekBar(p, pos, dur, track) }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     Toggle(Icons.Default.Shuffle, "Shuffle", p.shuffle, p::toggleShuffle)
                     IconButton(onClick = { p.previous() }, Modifier.size(60.dp)) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(40.dp)) }
@@ -399,7 +399,7 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
 }
 
 @Composable
-private fun SeekBar(p: PlayerConnection, pos: Long, dur: Long, format: String) {
+private fun SeekBar(p: PlayerConnection, pos: Long, dur: Long, track: Track?) {
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
     Column {
@@ -410,11 +410,10 @@ private fun SeekBar(p: PlayerConnection, pos: Long, dur: Long, format: String) {
         )
         Row(Modifier.fillMaxWidth()) {
             Text(duration(if (dragging) (dragValue * dur).toLong() else pos), style = MaterialTheme.typography.bodySmall)
-            // The file type, between the times: "Opus", "AAC", "Opus from FLAC".
-            Text(
-                format, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, maxLines = 1,
-            )
+            // Where the song came from and what plays, between the times: CD RIP · OPUS.
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                if (track != null) SourcePills(track)
+            }
             Text(duration(dur), style = MaterialTheme.typography.bodySmall)
         }
     }

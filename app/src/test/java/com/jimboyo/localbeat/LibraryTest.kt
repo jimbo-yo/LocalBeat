@@ -1,6 +1,8 @@
 package com.jimboyo.localbeat
 
 import com.jimboyo.localbeat.library.Library
+import com.jimboyo.localbeat.library.Origin
+import com.jimboyo.localbeat.library.Sources
 import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.library.TrackTags
 import com.jimboyo.localbeat.playlists.M3u
@@ -42,6 +44,28 @@ class LibraryTest {
         val server = track("a.opus", "S", "A", "B").copy(path = "server:Artist/Album/01 S.flac", serverSongId = "42")
         assertEquals("Opus from FLAC", server.format)
         assertEquals("Opus", server.copy(path = "server:42").format)
+    }
+
+    @Test
+    fun albumSourcesFromStudio() {
+        val albums = Sources.parse(
+            """{"version": 1, "albums": {"Band/Ripped": {"from": "cd"}, "Band - Old": {"from": "old", "format": "MP3"},
+               "Band/Odd": {"from": "?"}}}"""
+        )
+        assertEquals(mapOf("Band/Ripped" to Origin.CdRip, "Band - Old" to Origin.OldCopy("MP3")), albums)
+        assertEquals(emptyMap<String, Origin>(), Sources.parse("not json"))
+        val music = "/storage/emulated/0/Music"
+        fun at(path: String) = track("a.opus", "S", "A", "B").copy(path = path)
+        assertEquals(Origin.CdRip, Sources.originOf(at("$music/Band/Ripped/01. Band - S.opus"), music, albums))
+        assertEquals(Origin.OldCopy("MP3"), Sources.originOf(at("$music/Band - Old/01 - Band - S.opus"), music, albums))
+        assertEquals(Origin.Unknown, Sources.originOf(at("$music/Loose.opus"), music, albums))
+        assertEquals(Origin.Unknown, Sources.originOf(at("$music/Other/Album/x.opus"), music, albums))
+        val server = at("server:Artist/Album/01 S.flac").copy(serverSongId = "42")
+        assertEquals(Origin.CdRip, Sources.originOf(server, music, albums))
+        assertEquals(Origin.OldCopy("AAC"), Sources.originOf(server.copy(path = "server:A/B/01.m4a"), music, albums))
+        assertEquals("old MP3", at("x.opus").copy(origin = Origin.OldCopy("MP3")).sourceLabel)
+        assertEquals("CD rip", at("x.opus").copy(origin = Origin.CdRip).sourceLabel)
+        assertEquals("Opus", at("x.opus").sourceLabel)
     }
 
     @Test

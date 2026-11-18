@@ -28,6 +28,8 @@ data class Track(
     val serverSongId: String = "",
     /** The server's cover art ID for this song, if it has one. */
     val serverCoverArt: String = "",
+    /** Where it came from (a CD rip or an older copy), from Studio's sync ([Sources]); not cached. */
+    val origin: Origin = Origin.Unknown,
 ) {
     /** Who the album is filed under: the album artist, else the track artist. */
     val filedUnder: String get() = albumArtist.ifBlank { artist }
@@ -40,6 +42,16 @@ data class Track(
     val format: String get() {
         val source = formatOf(path)
         return if (!onServer) source else if (source.isEmpty() || source == "Opus") "Opus" else "Opus from $source"
+    }
+
+    /** The file type that plays: "Opus" for a server song (the server converts it as it streams). */
+    val playedAs: String get() = if (onServer) "Opus" else formatOf(path)
+
+    /** Its source in words, for Android Auto's one line: "CD rip", "old MP3", else the file type. */
+    val sourceLabel: String get() = when (val o = origin) {
+        Origin.CdRip -> "CD rip"
+        is Origin.OldCopy -> if (o.format.isEmpty()) "old copy" else "old ${o.format}"
+        Origin.Unknown -> format
     }
 
     companion object {
@@ -62,6 +74,16 @@ data class Track(
             }
         }
     }
+}
+
+/** Where a song came from, for its label. */
+sealed interface Origin {
+    /** Ripped from CD and verified (Studio's FLAC library). */
+    data object CdRip : Origin
+    /** An older copy (Studio's Miscellaneous library); [format] is its file type, "MP3", "AAC" ("" if not known). */
+    data class OldCopy(val format: String) : Origin
+    /** Not put on by Studio's sync (copied by hand), or the sync hasn't said yet. */
+    data object Unknown : Origin
 }
 
 class Album(
