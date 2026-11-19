@@ -52,7 +52,20 @@ class PlayerConnection(private val context: Context) {
             c.addListener(listener)
             controller = c
             sync(c)
+            pending?.let { pending = null; playItem(it) }
         }, MoreExecutors.directExecutor())
+    }
+
+    /** A request that arrived before the controller connected (a voice search opening the app). */
+    private var pending: MediaItem? = null
+
+    /** Plays a request item, e.g. a voice search ([com.jimboyo.localbeat.playback.VoiceRequest]); waits for the connection if needed. */
+    fun playItem(item: MediaItem) {
+        val c = controller ?: run { pending = item; return }
+        c.shuffleModeEnabled = false
+        c.setMediaItem(item)
+        c.prepare()
+        c.play()
     }
 
     fun release() {

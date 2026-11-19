@@ -44,6 +44,11 @@
                 <data android:mimeType="application/vnd.apple.mpegurl" />
                 <data android:mimeType="application/x-mpegurl" />
             </intent-filter>
+            <!-- "Hey Google, play … on LocalBeat" on the phone (VoiceRequest). -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <service

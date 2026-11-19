@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.jimboyo.localbeat.LocalBeatApp
 import com.jimboyo.localbeat.ThemeMode
+import com.jimboyo.localbeat.playback.VoiceRequest
 import com.jimboyo.localbeat.playlists.Playlist
 import com.jimboyo.localbeat.server.ConnectLink
 import com.jimboyo.localbeat.server.ServerSettings
@@ -97,9 +98,11 @@ class MainActivity : ComponentActivity() {
     /**
      * A music server link (`localbeat://connect`, the camera opening the server's
      * QR code; declared by the Connected edition only), or a playlist file opened
-     * or shared from another app (Files, KDE Connect…).
+     * or shared from another app (Files, KDE Connect…), or a voice request
+     * ("Hey Google, play … on LocalBeat").
      */
     private fun handleIntent(intent: Intent?) {
+        if (VoiceRequest.isVoice(intent)) return player.playItem(VoiceRequest.item(intent!!))
         val data = intent?.data
         if (intent?.action == Intent.ACTION_VIEW && data?.scheme.equals("localbeat", ignoreCase = true)) {
             if (app.server == null) return // the offline edition: no server

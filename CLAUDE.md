@@ -73,6 +73,10 @@ and LocalBeat Studio.)
 - Without developer settings: install with the Play Store as installer
   (`adb install -i com.android.vending`, the user's call, not done) or a
   Play Console testing track
+- Voice ("Hey Google, play … on LocalBeat"): Auto sends it to the session as a
+  `searchQuery` item; the phone starts `MainActivity` with
+  `MEDIA_PLAY_FROM_SEARCH` (`playback/VoiceRequest.kt`, 0.9.19). Both end in
+  `BrowseTree.voice`. Apps can't add their own wake words or phrases
 - The Desktop Head Unit (`~/Android/Sdk/extras/google/auto`) kept dropping
   the connection with Android Auto 17.9; not useful for now
 

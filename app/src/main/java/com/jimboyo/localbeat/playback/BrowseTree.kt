@@ -319,7 +319,7 @@ class BrowseTree(
         const val TRACK = "t:"
 
         private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
-        private const val EXTRA_MEDIA_PLAYLIST = "android.intent.extra.playlist"
+        const val EXTRA_MEDIA_PLAYLIST = "android.intent.extra.playlist"
         private const val RECENT_LIMIT = 100
         private const val SEARCH_LIMIT = 50
 
