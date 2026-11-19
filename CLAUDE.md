@@ -76,7 +76,12 @@ and LocalBeat Studio.)
 - Voice ("Hey Google, play … on LocalBeat"): Auto sends it to the session as a
   `searchQuery` item; the phone starts `MainActivity` with
   `MEDIA_PLAY_FROM_SEARCH` (`playback/VoiceRequest.kt`, 0.9.19). Both end in
-  `BrowseTree.voice`. Apps can't add their own wake words or phrases
+  `BrowseTree.voice`. Apps can't add their own wake words or phrases.
+  Gemini on the phone ignores LocalBeat (2026-11-19): it neither knows the
+  name nor lists it among music apps, even when reinstalled with the Play
+  Store as installer; it seems to use Google's own list of music apps. Android's own
+  chooser and `adb shell am start -n com.jimboyo.localbeat/.ui.MainActivity
+  -a android.media.action.MEDIA_PLAY_FROM_SEARCH --es query "…"` do work
 - The Desktop Head Unit (`~/Android/Sdk/extras/google/auto`) kept dropping
   the connection with Android Auto 17.9; not useful for now
 
