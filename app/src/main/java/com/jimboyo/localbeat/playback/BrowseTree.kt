@@ -192,25 +192,8 @@ class BrowseTree(
 
     // ---- items ----
 
-    /**
-     * A playable queue entry for a track, with the URI ExoPlayer plays. Its
-     * display lines (what Android Auto's playing screen shows) add where it came
-     * from to the artist: "Artist · CD rip", "Artist · old MP3". Browse lists
-     * keep the plain artist.
-     */
-    fun queueItem(track: Track, lib: Library): MediaItem {
-        val item = trackItem(track, lib)
-        val m = item.mediaMetadata
-        val subtitle = listOfNotNull(m.artist?.toString()?.ifBlank { null }, track.sourceLabel.ifBlank { null }).joinToString(" · ")
-        return item.buildUpon().setMediaMetadata(
-            m.buildUpon()
-                // Auto reads the display title/subtitle/description together, so set all three.
-                .setDisplayTitle(track.title)
-                .setSubtitle(subtitle)
-                .setDescription(track.album.ifBlank { null })
-                .build()
-        ).build()
-    }
+    /** A playable queue entry for a track, with the URI ExoPlayer plays. */
+    fun queueItem(track: Track, lib: Library): MediaItem = trackItem(track, lib)
 
     private fun inAlbumId(t: Track, lib: Library): String {
         val album = lib.albumOf(t) ?: return "$TRACK${t.id}"

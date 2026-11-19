@@ -28,62 +28,15 @@ data class Track(
     val serverSongId: String = "",
     /** The server's cover art ID for this song, if it has one. */
     val serverCoverArt: String = "",
-    /** Where it came from (a CD rip or an older copy), from Studio's sync ([Sources]); not cached. */
-    val origin: Origin = Origin.Unknown,
 ) {
     /** Who the album is filed under: the album artist, else the track artist. */
     val filedUnder: String get() = albumArtist.ifBlank { artist }
     /** Only on the music server (Connected edition), not on the phone. */
     val onServer: Boolean get() = serverSongId.isNotEmpty()
-    /**
-     * The file type, for Now Playing ("Opus", "AAC"…). A server song is played as
-     * the Opus the server makes from its file, so it says both: "Opus from FLAC".
-     */
-    val format: String get() {
-        val source = formatOf(path)
-        return if (!onServer) source else if (source.isEmpty() || source == "Opus") "Opus" else "Opus from $source"
-    }
-
-    /** The file type that plays: "Opus" for a server song (the server converts it as it streams). */
-    val playedAs: String get() = if (onServer) "Opus" else formatOf(path)
-
-    /** Its source in words, for Android Auto's one line: "CD rip", "old MP3", else the file type. */
-    val sourceLabel: String get() = when (val o = origin) {
-        Origin.CdRip -> "CD rip"
-        is Origin.OldCopy -> if (o.format.isEmpty()) "old copy" else "old ${o.format}"
-        Origin.Unknown -> format
-    }
 
     companion object {
         fun idForPath(path: String) = "t" + shortHash(path)
-
-        /** A file type's usual name, from the file name's extension ("" if it has none). */
-        fun formatOf(path: String): String {
-            val name = path.substringAfterLast('/')
-            if ('.' !in name) return ""
-            return when (val ext = name.substringAfterLast('.').lowercase()) {
-                "opus" -> "Opus"
-                "ogg", "oga" -> "Ogg Vorbis"
-                "m4a", "aac", "mp4" -> "AAC"
-                "mp3" -> "MP3"
-                "flac" -> "FLAC"
-                "wav" -> "WAV"
-                "alac" -> "ALAC"
-                "wma" -> "WMA"
-                else -> ext.uppercase()
-            }
-        }
     }
-}
-
-/** Where a song came from, for its label. */
-sealed interface Origin {
-    /** Ripped from CD and verified (Studio's FLAC library). */
-    data object CdRip : Origin
-    /** An older copy (Studio's Miscellaneous library); [format] is its file type, "MP3", "AAC" ("" if not known). */
-    data class OldCopy(val format: String) : Origin
-    /** Not put on by Studio's sync (copied by hand), or the sync hasn't said yet. */
-    data object Unknown : Origin
 }
 
 class Album(
