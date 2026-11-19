@@ -79,7 +79,12 @@ and LocalBeat Studio.)
   `BrowseTree.voice`. Apps can't add their own wake words or phrases.
   Gemini on the phone ignores LocalBeat (2026-11-19): it neither knows the
   name nor lists it among music apps, even when reinstalled with the Play
-  Store as installer; it seems to use Google's own list of music apps. Android's own
+  Store as installer; it seems to use Google's own list of music apps
+  (partners only: YouTube Music, Spotify, Pandora…; other local players hit
+  the same wall, web search 2026-11-19). The route to watch is
+  **AppFunctions** (Android 16+, no network needed): Gemini's use of it was
+  a private preview (Calendar/Notes/Tasks) as of 2026-05; a "play" function
+  calling `BrowseTree.voice` would be the way in once it opens. Android's own
   chooser and `adb shell am start -n com.jimboyo.localbeat/.ui.MainActivity
   -a android.media.action.MEDIA_PLAY_FROM_SEARCH --es query "…"` do work
 - The Desktop Head Unit (`~/Android/Sdk/extras/google/auto`) kept dropping
