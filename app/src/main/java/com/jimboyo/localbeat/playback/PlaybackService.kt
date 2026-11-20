@@ -66,7 +66,12 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onCreate() {
         super.onCreate()
-        tree = BrowseTree(app.art, { app.allPlaylists() }) { t -> app.server?.streamUri(t) }
+        tree = BrowseTree(
+            app.art,
+            { app.allPlaylists() },
+            { t -> app.server?.streamUri(t) },
+            { id -> app.server?.playlistId(id) ?: id },
+        )
         // The equaliser runs inside the audio sink, so it applies to every output.
         val equalizer = EqualizerProcessor { app.equalizer.state.value }
         val renderers = object : DefaultRenderersFactory(this) {
@@ -82,6 +87,7 @@ class PlaybackService : MediaLibraryService() {
         val dataSources = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
             val server = app.server
             val uri = server?.resolve(spec.uri) ?: spec.uri
+            if (uri.scheme == "localbeat") throw StreamBlockedException("Music server is turned off")
             if (uri.scheme == "http" || uri.scheme == "https") {
                 server?.streamBlockedReason()?.let { throw StreamBlockedException(it) }
             }
@@ -107,15 +113,16 @@ class PlaybackService : MediaLibraryService() {
                     error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
                 if (onServer && (cause != null || networkError)) {
                     // The server can't be used right now: check the connection, and carry on
-                    // with the next song that's on the phone rather than stopping.
+                    // with the next song that's on the phone rather than stopping (only if playing).
                     app.server?.reportStreamFailure()
-                    if (skipToPlayable()) {
+                    if (player.playWhenReady && skipToPlayable()) {
                         if (!toldSkipping) {
                             toldSkipping = true
                             Toast.makeText(this@PlaybackService, "Music server not connected: playing the songs on this phone", Toast.LENGTH_LONG).show()
                         }
                         return
                     }
+                    if (!player.playWhenReady) return
                 }
                 val message = cause?.message ?: when {
                     !onServer -> null
@@ -130,8 +137,8 @@ class PlaybackService : MediaLibraryService() {
             }
 
             override fun onEvents(player: Player, events: Player.Events) {
-                // A server song started: fetch it whole, so seeking works in it soon.
-                if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                // A server song started playing: fetch it whole, so seeking works in it soon.
+                if (player.playWhenReady && events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
                     val id = player.currentMediaItem?.mediaId?.let(BrowseTree::trackIdOf)
                     id?.let { app.library.library.value?.track(it) }?.takeIf { it.onServer }?.let { app.server?.fetchWhole(it) }
                 }
@@ -275,12 +282,18 @@ class PlaybackService : MediaLibraryService() {
     private fun chime(connected: Boolean) {
         val tone = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 80) }.getOrNull() ?: return
         tone.startTone(if (connected) ToneGenerator.TONE_PROP_ACK else ToneGenerator.TONE_PROP_NACK, 600)
-        scope.launch { delay(1_000); tone.release() }
+        scope.launch {
+            try {
+                delay(1_000)
+            } finally {
+                tone.release()
+            }
+        }
     }
 
     override fun onDestroy() {
         app.server?.setInUse("playing", false)
-        saveQueue()
+        saveQueue(sync = true)
         scope.cancel()
         session?.run {
             player.release()
@@ -293,9 +306,11 @@ class PlaybackService : MediaLibraryService() {
     // ---- queue persistence ----
 
     private suspend fun restoreQueue() {
-        val saved = app.queueStore.load()
+        val saved = kotlinx.coroutines.withContext(Dispatchers.IO) { app.queueStore.load() }
         if (saved == null || player.mediaItemCount > 0) {
+            val hadItems = player.mediaItemCount > 0
             restored = true
+            if (hadItems) saveQueue()
             return
         }
         val lib = app.library.awaitLibrary()
@@ -307,28 +322,32 @@ class PlaybackService : MediaLibraryService() {
                 player.repeatMode = saved.repeatMode
                 player.prepare()
             }
+            restored = true
+        } else {
+            restored = true
+            saveQueue()
         }
-        restored = true
     }
 
     private fun savedItems(saved: QueueStore.Saved, lib: Library): MediaSession.MediaItemsWithStartPosition? {
-        val current = saved.trackIds.getOrNull(saved.index)
-        val tracks = saved.trackIds.mapNotNull(lib::track)
+        val resolved = saved.trackIds.map(lib::track)
+        val tracks = resolved.filterNotNull()
         if (tracks.isEmpty()) return null
-        val index = tracks.indexOfFirst { it.id == current }
+        val hasCurrent = saved.index in resolved.indices && resolved[saved.index] != null
+        val index = if (hasCurrent) resolved.take(saved.index).count { it != null } else 0
         return MediaSession.MediaItemsWithStartPosition(
             tracks.map { tree.queueItem(it, lib) },
-            index.coerceAtLeast(0),
-            if (index >= 0) saved.positionMs else 0,
+            index.coerceIn(0, tracks.lastIndex),
+            if (hasCurrent) saved.positionMs else 0,
         )
     }
 
-    private fun saveQueue() {
+    private fun saveQueue(sync: Boolean = false) {
         if (!restored || !::player.isInitialized) return
         val ids = List(player.mediaItemCount) { BrowseTree.trackIdOf(player.getMediaItemAt(it).mediaId) ?: "" }
-        app.queueStore.save(
-            QueueStore.Saved(ids, player.currentMediaItemIndex, player.currentPosition, player.shuffleModeEnabled, player.repeatMode)
-        )
+        val snapshot = QueueStore.Saved(ids, player.currentMediaItemIndex, player.currentPosition, player.shuffleModeEnabled, player.repeatMode)
+        if (sync) app.queueStore.save(snapshot)
+        else scope.launch(Dispatchers.IO) { app.queueStore.save(snapshot) }
     }
 
     // ---- session callback ----
@@ -338,9 +357,10 @@ class PlaybackService : MediaLibraryService() {
             if (app.server == null) return super.onConnect(session, controller)
             val base = if (controller.isTrusted) MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
             else MediaSession.ConnectionResult.DEFAULT_UNTRUSTED_SESSION_AND_LIBRARY_COMMANDS
+            val commands = if (controller.isTrusted) base.buildUpon().add(onPhoneCommand).build() else base
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-                .setAvailableSessionCommands(base.buildUpon().add(onPhoneCommand).build())
-                .setMediaButtonPreferences(mediaButtons())
+                .setAvailableSessionCommands(commands)
+                .setMediaButtonPreferences(if (controller.isTrusted) mediaButtons() else emptyList())
                 .build()
         }
 
@@ -348,6 +368,7 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle,
         ): ListenableFuture<SessionResult> {
             if (customCommand.customAction != ON_PHONE_ACTION) return super.onCustomCommand(session, controller, customCommand, args)
+            if (!controller.isTrusted) return Futures.immediateFuture(SessionResult(SessionError.ERROR_PERMISSION_DENIED))
             val server = app.server
             if (server != null && server.settings.value.enabled && !server.connected.value) server.checkNow()
             else app.library.setOnPhoneOnly(!app.library.onPhoneOnly.value)
@@ -423,8 +444,10 @@ class PlaybackService : MediaLibraryService() {
                 MediaSession.MediaItemsWithStartPosition(q.tracks.map { tree.queueItem(it, lib) }, q.startIndex, startPositionMs)
             } else {
                 val tracks = mediaItems.map { item -> BrowseTree.trackIdOf(item.mediaId)?.let(lib::track) }
-                val start = tracks.take(startIndex.coerceAtLeast(0)).count { it != null }
-                MediaSession.MediaItemsWithStartPosition(tracks.filterNotNull().map { tree.queueItem(it, lib) }, start, startPositionMs)
+                val resolved = tracks.filterNotNull().map { tree.queueItem(it, lib) }
+                val start = if (resolved.isEmpty()) C.INDEX_UNSET
+                else tracks.take(startIndex.coerceAtLeast(0)).count { it != null }.coerceIn(0, resolved.lastIndex)
+                MediaSession.MediaItemsWithStartPosition(resolved, start, startPositionMs)
             }
         }
 
@@ -432,7 +455,8 @@ class PlaybackService : MediaLibraryService() {
         override fun onPlaybackResumption(
             mediaSession: MediaSession, controller: MediaSession.ControllerInfo, isForPlayback: Boolean,
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> = scope.future {
-            val saved = app.queueStore.load() ?: throw UnsupportedOperationException("Nothing to resume")
+            val saved = kotlinx.coroutines.withContext(Dispatchers.IO) { app.queueStore.load() }
+                ?: throw UnsupportedOperationException("Nothing to resume")
             savedItems(saved, app.library.awaitLibrary()) ?: throw UnsupportedOperationException("Saved queue is gone")
         }
     }
@@ -443,5 +467,5 @@ class PlaybackService : MediaLibraryService() {
 
     private fun <T> List<T>.page(page: Int, pageSize: Int): List<T> =
         if (pageSize <= 0 || pageSize == Int.MAX_VALUE) this
-        else drop((page.toLong() * pageSize).coerceAtMost(size.toLong()).toInt()).take(pageSize)
+        else drop((page.coerceAtLeast(0).toLong() * pageSize).coerceAtMost(size.toLong()).toInt()).take(pageSize)
 }

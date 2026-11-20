@@ -16,7 +16,7 @@ import java.util.Locale
  * is what turns "Sittin’" into "Sittinâ€™" in Android's own media scanner.
  */
 class VorbisComments(val vendor: String, private val fields: Map<String, List<String>>) {
-    operator fun get(key: String): String? = all(key).firstOrNull()?.takeIf { it.isNotBlank() }
+    operator fun get(key: String): String? = all(key).firstOrNull { it.isNotBlank() }
 
     fun all(key: String): List<String> = fields[key.uppercase(Locale.ROOT)].orEmpty()
 
@@ -121,12 +121,20 @@ object OggTags {
     /** Parses a FLAC METADATA_BLOCK_PICTURE (all integers big-endian). */
     fun parsePictureBlock(block: ByteArray): EmbeddedPicture {
         val buf = ByteBuffer.wrap(block).order(ByteOrder.BIG_ENDIAN)
+        fun readLen(): Int {
+            if (buf.remaining() < 4) throw IOException("Truncated FLAC picture block")
+            val len = buf.int
+            if (len < 0 || len > buf.remaining()) throw IOException("Invalid length $len in FLAC picture block")
+            return len
+        }
+        if (buf.remaining() < 4) throw IOException("Truncated FLAC picture block")
         val type = buf.int
-        val mime = ByteArray(buf.int).also { buf.get(it) }
-        val description = buf.int
+        val mime = ByteArray(readLen()).also { buf.get(it) }
+        val description = readLen()
         buf.position(buf.position() + description)
+        if (buf.remaining() < 16) throw IOException("Truncated FLAC picture block")
         buf.position(buf.position() + 16) // width, height, depth, colours
-        val data = ByteArray(buf.int).also { buf.get(it) }
+        val data = ByteArray(readLen()).also { buf.get(it) }
         return EmbeddedPicture(type, String(mime, Charsets.US_ASCII), data)
     }
 
@@ -194,7 +202,8 @@ object OggTags {
             val b = readBytes(4)
             val v = (b[0].toLong() and 0xff) or ((b[1].toLong() and 0xff) shl 8) or
                 ((b[2].toLong() and 0xff) shl 16) or ((b[3].toLong() and 0xff) shl 24)
-            if (v > max) throw IOException("Implausible length $v in Ogg comment header")
+            val limit = minOf(max.toLong(), (channel.size() - channel.position() + remainingInPage).coerceAtLeast(0L))
+            if (v > limit) throw IOException("Implausible length $v in Ogg comment header")
             return v.toInt()
         }
 

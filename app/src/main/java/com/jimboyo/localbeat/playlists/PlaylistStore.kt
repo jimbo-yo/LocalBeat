@@ -25,6 +25,7 @@ class PlaylistStore(private val context: Context) {
     fun add(id: String, entries: List<String>) = update(id) { it.copy(entries = it.entries + entries) }
     fun removeAt(id: String, index: Int) = update(id) { p -> p.copy(entries = p.entries.filterIndexed { i, _ -> i != index }) }
     fun move(id: String, from: Int, to: Int) = update(id) { p ->
+        if (from !in p.entries.indices || to !in p.entries.indices || from == to) return@update p
         p.copy(entries = p.entries.toMutableList().apply { add(to, removeAt(from)) })
     }
 
@@ -57,9 +58,19 @@ class PlaylistStore(private val context: Context) {
 
     @Synchronized
     private fun save(p: Playlist) {
+        dir.mkdirs()
         val tmp = File(dir, "${p.id}.tmp")
-        tmp.writeText(M3u.write(p.name, p.entries, null))
-        tmp.renameTo(File(dir, "${p.id}.m3u8"))
+        val target = File(dir, "${p.id}.m3u8")
+        try {
+            tmp.writeText(M3u.write(p.name, p.entries, null))
+            if (!tmp.renameTo(target)) {
+                tmp.delete()
+                return
+            }
+        } catch (e: Exception) {
+            tmp.delete()
+            return
+        }
         _playlists.value = (_playlists.value.filter { it.id != p.id } + p).sortedBy { SortKey.of(it.name) }
     }
 

@@ -16,7 +16,10 @@ data class ServerSettings(
     val useMobileData: Boolean = false,
     /** A short tone when the server connects or disconnects while music is playing. */
     val connectionSound: Boolean = true,
-)
+) {
+    override fun toString(): String =
+        "ServerSettings(enabled=$enabled, address=$address, username=$username, password=***, useMobileData=$useMobileData, connectionSound=$connectionSound)"
+}
 
 /** Thrown when the player asks for a server song that isn't allowed right now (e.g. on mobile data). */
 class StreamBlockedException(message: String) : java.io.IOException(message)

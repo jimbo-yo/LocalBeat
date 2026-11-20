@@ -83,7 +83,7 @@ fun NowPlayingBody(ui: Ui, lib: Library, modifier: Modifier) {
                 )
                 Box {
                     AlbumArt(t?.let(lib::albumOf), Modifier.size(44.dp), maxPx = 160)
-                    if (i == p.currentIndex) PlayingOverlay(Modifier.matchParentSize())
+                    if (current) PlayingOverlay(Modifier.matchParentSize())
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(
@@ -94,7 +94,7 @@ fun NowPlayingBody(ui: Ui, lib: Library, modifier: Modifier) {
                     Text(t?.let { it.artist.ifBlank { it.filedUnder } }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(duration(t?.durationMs ?: 0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton(onClick = { p.removeAt(i) }, enabled = !current) { Icon(Icons.Default.Close, "Remove from queue") }
+                IconButton(onClick = { p.removeAt(i) }, enabled = i != p.currentIndex && reorder.draggingKey == null) { Icon(Icons.Default.Close, "Remove from queue") }
             }
         }
     }

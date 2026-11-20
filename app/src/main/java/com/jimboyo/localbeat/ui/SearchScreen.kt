@@ -47,6 +47,8 @@ fun SearchScreen(ui: Ui, lib: Library) {
     val keyboard = LocalSoftwareKeyboardController.current
     val query = ui.searchQuery
     val results by produceState<Search.Results?>(null, query, lib) {
+        value = null
+        if (query.isBlank()) return@produceState
         delay(120) // let fast typing settle
         value = withContext(Dispatchers.Default) { Search.run(query, lib) }
     }

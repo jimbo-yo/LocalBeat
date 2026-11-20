@@ -36,7 +36,8 @@ class EqualizerStore(context: Context) {
     fun apply(p: EqPreset) = save(EqState(enabled = true, gains = p.gains))
 
     fun saveCustom(name: String) {
-        val n = name.trim()
+        val n = name.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ').trim()
+        if (n.isEmpty()) return
         _custom.value = _custom.value.filter { it.name != n } + EqPreset(n, _state.value.gains, builtIn = false)
         storeCustom()
     }
@@ -58,9 +59,12 @@ class EqualizerStore(context: Context) {
     }
 
     private fun storeCustom() = prefs.edit {
-        putString("custom", _custom.value.joinToString("\n") { p -> p.name.replace('\t', ' ').replace('\n', ' ') + "\t" + p.gains.joinToString(",") })
+        putString("custom", _custom.value.joinToString("\n") { p ->
+            p.name.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ') + "\t" + p.gains.joinToString(",")
+        })
     }
 
     private fun parseGains(s: String?): List<Float>? =
-        s?.split(',')?.mapNotNull { it.toFloatOrNull() }?.takeIf { it.size == Eq.BANDS }
+        s?.split(',')?.mapNotNull { it.toFloatOrNull()?.takeIf(Float::isFinite)?.coerceIn(-Eq.MAX_DB, Eq.MAX_DB) }
+            ?.takeIf { it.size == Eq.BANDS }
 }

@@ -1,5 +1,6 @@
 package com.jimboyo.localbeat.ui
 
+import android.content.ComponentCallbacks2
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Image
@@ -11,8 +12,11 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,8 +31,18 @@ import com.jimboyo.localbeat.library.Album
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private object ArtMemory : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
+internal object ArtMemory : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
     override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+
+    fun clear() = evictAll()
+
+    @Suppress("DEPRECATION")
+    fun trim(level: Int) {
+        when {
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> evictAll()
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> trimToSize(maxSize() / 2)
+        }
+    }
 }
 
 /** An album cover, or a placeholder for albums without one (the older rips). */
@@ -36,12 +50,11 @@ private object ArtMemory : LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
 fun AlbumArt(album: Album?, modifier: Modifier = Modifier, maxPx: Int = 512) {
     val context = LocalContext.current
     val key = album?.let { "${it.id}/$maxPx" }
-    val bitmap by produceState(key?.let { ArtMemory.get(it) }, key) {
-        // The state outlives a change of album (only this block restarts), so it
-        // still holds the previous cover here: always replace it.
-        value = key?.let { ArtMemory.get(it) }
-        if (album == null || key == null || value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
+    // Remembered per key so changing albums never flashes the previous cover for one frame.
+    var bitmap by remember(key) { mutableStateOf(key?.let { ArtMemory.get(it) }) }
+    LaunchedEffect(key) {
+        if (album == null || key == null || bitmap != null) return@LaunchedEffect
+        bitmap = withContext(Dispatchers.IO) {
             val file = (context.applicationContext as LocalBeatApp).art.file(album) ?: return@withContext null
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.path, bounds)

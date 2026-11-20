@@ -32,7 +32,14 @@ class BrowseTree(
     private val playlists: () -> List<Playlist>,
     /** Where a music-server song streams from (Connected edition). */
     private val serverUri: (Track) -> android.net.Uri? = { null },
+    /** Resolves temporary offline-created playlist IDs to their synced server IDs. */
+    private val resolvePlaylistId: (String) -> String = { it },
 ) {
+
+    private fun findPlaylist(id: String): Playlist? {
+        val resolved = resolvePlaylistId(id)
+        return playlists().firstOrNull { it.id == resolved || it.id == id }
+    }
 
     // ---- browsing ----
 
@@ -69,7 +76,7 @@ class BrowseTree(
             PLAYLISTS -> playlists().map { playlistItem(it, lib) }
             GENRE -> lib.genre(id)?.albums?.map { albumItem(it) }
             DECADE -> lib.decade(id)?.albums?.map { albumItem(it) }
-            PLAYLIST -> playlists().firstOrNull { it.id == id }?.let { listItems(parentId, it.tracks(lib), lib) }
+            PLAYLIST -> findPlaylist(id)?.let { listItems(parentId, it.tracks(lib), lib) }
             ALBUM -> lib.album(id)?.let { album ->
                 listItems(parentId, album.tracks, lib) { t -> if (album.discCount > 1) "Disc ${t.discNumber}" else null }
             }
@@ -90,7 +97,7 @@ class BrowseTree(
             ARTIST_ALL -> lib.artist(id)?.let { playAllItem(it) }
             GENRE -> lib.genre(id)?.let { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) }
             DECADE -> lib.decade(id)?.let { groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS) }
-            PLAYLIST -> playlists().firstOrNull { it.id == id }?.let { playlistItem(it, lib) }
+            PLAYLIST -> findPlaylist(id)?.let { playlistItem(it, lib) }
             else -> trackIdOf(mediaId)?.let(lib::track)?.let { trackItem(it, lib) }
                 ?: (children(ROOT, lib)!! + children(MORE, lib)!!).firstOrNull { it.mediaId == mediaId }
         }
@@ -141,7 +148,7 @@ class BrowseTree(
             ARTIST, ARTIST_ALL -> lib.artist(id)?.tracks
             GENRE -> lib.genre(id)?.albums?.flatMap { it.tracks }
             DECADE -> lib.decade(id)?.albums?.flatMap { it.tracks }
-            PLAYLIST -> playlists().firstOrNull { it.id == id }?.tracks(lib)
+            PLAYLIST -> findPlaylist(id)?.tracks(lib)
             SONGS -> lib.tracks
             else -> null
         }
@@ -154,6 +161,7 @@ class BrowseTree(
         val albumName = extras?.getString(MediaStore.EXTRA_MEDIA_ALBUM)?.let(::searchKey).orEmpty()
         val playlistName = extras?.getString(EXTRA_MEDIA_PLAYLIST)?.let(::searchKey).orEmpty()
         val genreName = extras?.getString(MediaStore.EXTRA_MEDIA_GENRE)?.let(::searchKey).orEmpty()
+        val focus = extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)
         val q = searchKey(query)
 
         fun ofTrack(t: Track): Queue {
@@ -172,13 +180,28 @@ class BrowseTree(
             ranked(candidates, title) { it.title }.firstOrNull()?.let { return ofTrack(it) }
         }
         if (albumName.isNotEmpty()) {
-            ranked(lib.albums, albumName) { it.title }.firstOrNull()?.let { return Queue(it.tracks, 0) }
+            val candidates = lib.albums.filter { artist.isEmpty() || artist in searchKey(it.artist) }
+            ranked(candidates.ifEmpty { lib.albums }, albumName) { it.title }.firstOrNull()?.let { return Queue(it.tracks, 0) }
         }
         if (artist.isNotEmpty()) {
             ranked(lib.artists, artist) { it.name }.firstOrNull()?.let { return Queue(it.tracks, 0) }
         }
         if (genreName.isNotEmpty()) {
             ranked(lib.genres, genreName) { it.name }.firstOrNull()?.let { g -> return Queue(g.albums.flatMap { it.tracks }.shuffled(), 0) }
+        }
+        if (q.isEmpty()) return Queue(emptyList(), 0)
+        // Honour EXTRA_MEDIA_FOCUS if the assistant told us what kind of thing was requested.
+        when (focus) {
+            MediaStore.Audio.Playlists.ENTRY_CONTENT_TYPE ->
+                ranked(playlists(), q) { it.name }.firstOrNull()?.let { return Queue(it.tracks(lib), 0) }
+            MediaStore.Audio.Artists.ENTRY_CONTENT_TYPE ->
+                ranked(lib.artists, q) { it.name }.firstOrNull()?.let { return Queue(it.tracks, 0) }
+            MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE ->
+                ranked(lib.albums, q) { it.title }.firstOrNull()?.let { return Queue(it.tracks, 0) }
+            MediaStore.Audio.Genres.ENTRY_CONTENT_TYPE ->
+                ranked(lib.genres, q) { it.name }.firstOrNull()?.let { g -> return Queue(g.albums.flatMap { it.tracks }.shuffled(), 0) }
+            MediaStore.Audio.Media.ENTRY_CONTENT_TYPE ->
+                ranked(lib.tracks, q) { it.title }.firstOrNull()?.let { return ofTrack(it) }
         }
         // Free text: the best match wins; on a tie playlists, then artists, albums, songs.
         val best = listOfNotNull(
@@ -221,9 +244,14 @@ class BrowseTree(
             .setIsBrowsable(false)
             .setIsPlayable(true)
         if (group != null) metadata.setExtras(Bundle().apply { putString(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_GROUP_TITLE, group) })
+        val uri = if (track.onServer) {
+            serverUri(track) ?: android.net.Uri.parse("localbeat://unavailable/${track.id}")
+        } else {
+            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, track.mediaStoreId)
+        }
         return MediaItem.Builder()
             .setMediaId(mediaId)
-            .setUri(if (track.onServer) serverUri(track) else ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, track.mediaStoreId))
+            .setUri(uri)
             .setMediaMetadata(metadata.build())
             .build()
     }
@@ -339,12 +367,16 @@ class BrowseTree(
 
         private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 
+        private val NON_ALNUM = Regex("[^\\p{L}\\p{N} ]")
+        private val SPACES = Regex("\\s+")
+
         /** Looser than [fold]: punctuation is ignored, so "guns n roses" finds "Guns N’ Roses". */
         fun searchKey(s: String): String =
-            fold(s).replace(Regex("[^\\p{L}\\p{N} ]"), "").replace(Regex("\\s+"), " ").trim()
+            fold(s).replace(NON_ALNUM, "").replace(SPACES, " ").trim()
 
         /** 3 = exact, 2 = starts with, 1 = a word starts with, 0.5 = contains, 0 = no match. */
         fun score(text: String, q: String): Double {
+            if (q.isEmpty()) return 0.0
             val t = searchKey(text)
             return when {
                 t == q -> 3.0

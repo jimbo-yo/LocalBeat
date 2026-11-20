@@ -264,7 +264,18 @@ fun PlaylistPage(ui: Ui, lib: Library, id: String) {
     val onServer = serverPlaylists(ui)
     // A playlist made on the phone gets the server's ID once it has been sent.
     val serverId = ui.app.server?.playlistId(id) ?: id
-    val playlist = phone.firstOrNull { it.id == id } ?: onServer.firstOrNull { it.id == serverId } ?: return
+    val playlist = phone.firstOrNull { it.id == id } ?: onServer.firstOrNull { it.id == serverId }
+    if (playlist == null) {
+        Column(
+            Modifier.fillMaxWidth().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text("This playlist isn't available right now.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            androidx.compose.material3.Button(onClick = ui::back) { Text("Back") }
+        }
+        return
+    }
     val editor = editorFor(ui, playlist) ?: return SharedPlaylistPage(ui, lib, playlist)
     val listId = BrowseTree.PLAYLIST + playlist.id
     var renaming by remember { mutableStateOf(false) }

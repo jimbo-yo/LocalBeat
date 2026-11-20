@@ -63,6 +63,17 @@ class LibraryTest {
         assertEquals(zep, M3u.resolve("file:///home/musicuser/Music/phone/Led%20Zeppelin/Led%20Zeppelin/01.%20Good%20Times.opus", lib))
         assertEquals(zep, M3u.resolve("somewhere/else/01. Good Times.opus", lib)) // unique file name
         assertNull(M3u.resolve("Nope/nothing.opus", lib))
+
+        // Paths starting with '#' and names with '\r' round-trip without losing entries or injecting lines.
+        val hashPath = "#1 Hits/01. Song.opus"
+        val hashText = M3u.write("Line1\rLine2\nLine3", listOf(hashPath, rel), lib)
+        val hashParsed = M3u.parse(hashText)
+        assertEquals("Line1 Line2 Line3", hashParsed.name)
+        assertEquals(listOf(hashPath, rel), hashParsed.paths)
+
+        // MoveToServer.pathKey normalizes backslashes and preserves dotted folder names when extensionless.
+        assertEquals("r.e.m./track", com.jimboyo.localbeat.playlists.MoveToServer.pathKey("R.E.M.\\Track"))
+        assertEquals("r.e.m./01. losing my religion", com.jimboyo.localbeat.playlists.MoveToServer.pathKey("R.E.M.\\01. Losing My Religion.flac"))
     }
 
     // ---- the music server's songs merged with the phone's ----
@@ -137,6 +148,10 @@ class LibraryTest {
         val lib = Library(Library.merge(phone, server), Library.standIns(phone, server))
         assertEquals("s1", lib.serverId(hello))
         assertNull(lib.serverId(phoneOnly))
+        // albumOf(trackId) resolves merged server track IDs via standIns.
+        assertEquals(lib.albumOf(hello), lib.albumOf("s1"))
+        // Empty voice search query must score 0, not match everything.
+        assertEquals(0.0, com.jimboyo.localbeat.playback.BrowseTree.score("Road trip", ""), 0.0)
 
         val p = com.jimboyo.localbeat.playlists.Playlist(
             "x", "Mix", listOf("Oasis/Morning Glory/01. Oasis - Hello.opus", "Oasis/Morning Glory/02. Oasis - Roll With It.opus", "Mine/Demo/01. Me - Demo.opus", "Gone/x.opus"),

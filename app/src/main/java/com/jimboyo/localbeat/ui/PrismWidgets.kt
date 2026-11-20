@@ -66,10 +66,9 @@ fun PlayPauseButton(playing: Boolean, onClick: () -> Unit, size: Dp, iconSize: D
         return
     }
     Box(
-        Modifier.size(size).clip(CircleShape)
+        Modifier.size(size).alpha(if (enabled) 1f else 0.4f).clip(CircleShape)
             .background(Brush.linearGradient(listOf(Prism.cyan, Prism.blue, Prism.violet, Prism.magenta, Prism.amber)))
             .background(Color.Black.copy(alpha = 0.12f))
-            .alpha(if (enabled) 1f else 0.4f)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, "Play/pause", Modifier.size(iconSize), tint = Color.White) }

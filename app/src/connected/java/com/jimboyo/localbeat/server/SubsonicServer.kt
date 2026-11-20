@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.jimboyo.localbeat.tags.OggTags
 import java.io.File
 import java.io.FileInputStream
@@ -75,6 +77,9 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     @Volatile private var api: SubsonicApi? = null
     private var refreshJob: Job? = null
+    private val fetchMutex = Mutex()
+    private val downloadMutex = Mutex()
+    private val offlineLock = Any()
 
     // ---- the connection: connected or not, with a steadiness rule ----
     private val gate = ConnectionGate(STEADY_MS)
@@ -163,6 +168,10 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             return
         }
         refreshJob?.cancel()
+        sendJob?.cancel()
+        sendJob = null
+        madeAs.clear()
+        formPost = false
         gate.reset()
         fetched = false
         lastConnected = null
@@ -204,12 +213,18 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         return runCatching { playlistsFromJson(playlistsFile.readText()) }.getOrDefault(emptyList())
     }
 
+    @Synchronized
     private fun savePlaylists(lists: List<Playlist>) {
         runCatching {
             val tmp = File(playlistsFile.path + ".tmp")
-            tmp.writeText(playlistsToJson(lists))
-            if (!tmp.renameTo(playlistsFile)) throw IOException("can't replace ${playlistsFile.name}")
-            prefs.edit { putString("playlistsFor", serverKey()) }
+            try {
+                tmp.writeText(playlistsToJson(lists))
+                if (!tmp.renameTo(playlistsFile)) throw IOException("can't replace ${playlistsFile.name}")
+                prefs.edit { putString("playlistsFor", serverKey()) }
+            } catch (e: Exception) {
+                tmp.delete()
+                throw e
+            }
         }.onFailure { Log.w(TAG, "Saving the server's playlists: ${it.message}") }
     }
 
@@ -217,6 +232,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     /** The saved playlists and the edits still to send, for this server and user. */
     private fun restorePlaylists() {
+        formPost = prefs.getString("formPostFor", null) == serverKey() && prefs.getBoolean("formPost", false)
         loadEdits()
         setBase(savedPlaylists())
     }
@@ -254,8 +270,9 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         }.onFailure { Log.w(TAG, "Saving playlist changes: ${it.message}") }
     }
 
-    private fun edit(e: PlaylistEdit) {
+    private fun edit(id: String, build: (String) -> PlaylistEdit) {
         synchronized(this) {
+            val e = build(madeAs[id] ?: id)
             queue = PlaylistEdits.enqueue(queue, e, base)
             saveEdits()
             publishPlaylists()
@@ -267,14 +284,14 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     override fun createPlaylist(name: String, trackIds: List<String>): String {
         val id = PlaylistEdits.NEW + java.util.UUID.randomUUID().toString().take(8)
-        edit(PlaylistEdit.Create(id, name.trim().ifEmpty { "Playlist" }, trackIds))
+        edit(id) { PlaylistEdit.Create(it, name.trim().ifEmpty { "Playlist" }, trackIds) }
         return id
     }
-    override fun addToPlaylist(id: String, trackIds: List<String>) { if (trackIds.isNotEmpty()) edit(PlaylistEdit.Add(playlistId(id), trackIds)) }
-    override fun removeFromPlaylist(id: String, positions: List<Int>) { if (positions.isNotEmpty()) edit(PlaylistEdit.Remove(playlistId(id), positions)) }
-    override fun setPlaylistSongs(id: String, trackIds: List<String>) = edit(PlaylistEdit.SetSongs(playlistId(id), trackIds))
-    override fun renamePlaylist(id: String, name: String) { if (name.isNotBlank()) edit(PlaylistEdit.Rename(playlistId(id), name.trim())) }
-    override fun deletePlaylist(id: String) = edit(PlaylistEdit.Delete(playlistId(id)))
+    override fun addToPlaylist(id: String, trackIds: List<String>) { if (trackIds.isNotEmpty()) edit(id) { PlaylistEdit.Add(it, trackIds) } }
+    override fun removeFromPlaylist(id: String, positions: List<Int>) { if (positions.isNotEmpty()) edit(id) { PlaylistEdit.Remove(it, positions) } }
+    override fun setPlaylistSongs(id: String, trackIds: List<String>) = edit(id) { PlaylistEdit.SetSongs(it, trackIds) }
+    override fun renamePlaylist(id: String, name: String) { if (name.isNotBlank()) edit(id) { PlaylistEdit.Rename(it, name.trim()) } }
+    override fun deletePlaylist(id: String) = edit(id) { PlaylistEdit.Delete(it) }
     override fun clearPlaylistNotice() { _notice.value = null }
 
     @Synchronized
@@ -290,28 +307,46 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
      */
     private fun sendEdits() {
         val a = api ?: return
+        val key = serverKey()
         if (meteredBlock() != null) return
-        val songIds = _tracks.value.associate { it.id to it.serverSongId }
-        fun ids(trackIds: List<String>) = trackIds.mapNotNull { songIds[it] }
+        fun resolveSongIds(trackIds: List<String>): List<String>? {
+            if (trackIds.isEmpty()) return emptyList()
+            val songIds = _tracks.value.associate { it.id to it.serverSongId }
+            val resolved = trackIds.mapNotNull { songIds[it] }
+            // Wait for fetch() if the catalogue isn't loaded yet so we never drop songs or wipe a playlist.
+            if (resolved.size < trackIds.size && !fetched) return null
+            return resolved
+        }
         while (true) {
+            if (api !== a) return
             val e = synchronized(this) { queue.edits.firstOrNull() } ?: break
+            val usePost = formPost
             try {
                 if (e is PlaylistEdit.Create) {
-                    val made = a.createPlaylist(e.name, ids(e.songs), formPost)
-                    val p = SubsonicApi.toPlaylist(serverKey(), a.username, made) ?: throw IOException("no playlist ID")
+                    val songIds = resolveSongIds(e.songs) ?: return
+                    val made = a.createPlaylist(e.name, songIds, usePost)
+                    val p = SubsonicApi.toPlaylist(key, a.username, made) ?: throw IOException("no playlist ID")
                     synchronized(this) {
+                        if (api !== a) return
                         madeAs[e.playlistId] = p.id
                         queue = PlaylistEdits.created(queue, e.playlistId, p.id, p.changed)
                         base = listOf(p) + base
                     }
                 } else {
+                    val songIds = when (e) {
+                        is PlaylistEdit.Add -> resolveSongIds(e.songs) ?: return
+                        is PlaylistEdit.SetSongs -> resolveSongIds(e.songs) ?: return
+                        else -> emptyList()
+                    }
                     val now = a.playlist(e.playlistId)
+                    if (api !== a) return
                     val known = synchronized(this) { queue.known[e.playlistId] }.orEmpty()
-                    val name = base.firstOrNull { it.id == e.playlistId }?.name ?: "A playlist"
+                    val name = synchronized(this) { base.firstOrNull { it.id == e.playlistId }?.name } ?: "A playlist"
                     if (now == null || (known.isNotEmpty() && now.optString("changed") != known)) {
                         // Changed (or deleted) elsewhere: the server's version wins.
-                        val theirs = now?.let { SubsonicApi.toPlaylist(serverKey(), a.username, it) }
+                        val theirs = now?.let { SubsonicApi.toPlaylist(key, a.username, it) }
                         synchronized(this) {
+                            if (api !== a) return
                             queue = PlaylistEdits.dropPlaylist(queue, e.playlistId)
                             base = if (theirs == null) base.filter { it.id != e.playlistId } else base.map { if (it.id == theirs.id) theirs else it }
                         }
@@ -320,33 +355,43 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
                             else "“$name” was changed elsewhere; the music server's version is kept"
                     } else {
                         when (e) {
-                            is PlaylistEdit.Add -> a.updatePlaylist(e.playlistId, add = ids(e.songs), formPost = formPost)
-                            is PlaylistEdit.Remove -> a.updatePlaylist(e.playlistId, remove = e.positions, formPost = formPost)
-                            is PlaylistEdit.SetSongs -> a.setPlaylistSongs(e.playlistId, ids(e.songs), formPost)
-                            is PlaylistEdit.Rename -> a.updatePlaylist(e.playlistId, name = e.name, formPost = formPost)
+                            is PlaylistEdit.Add -> a.updatePlaylist(e.playlistId, add = songIds, formPost = usePost)
+                            is PlaylistEdit.Remove -> a.updatePlaylist(e.playlistId, remove = e.positions, formPost = usePost)
+                            is PlaylistEdit.SetSongs -> a.setPlaylistSongs(e.playlistId, songIds, usePost)
+                            is PlaylistEdit.Rename -> a.updatePlaylist(e.playlistId, name = e.name, formPost = usePost)
                             is PlaylistEdit.Delete -> a.deletePlaylist(e.playlistId)
                             is PlaylistEdit.Create -> Unit
                         }
-                        val after = if (e is PlaylistEdit.Delete) null else a.playlist(e.playlistId)?.let { SubsonicApi.toPlaylist(serverKey(), a.username, it) }
+                        // The mutation succeeded: consume it even if the follow-up read fails so we never replay it.
+                        val after = if (e is PlaylistEdit.Delete) null else runCatching {
+                            a.playlist(e.playlistId)?.let { SubsonicApi.toPlaylist(key, a.username, it) }
+                        }.getOrNull()
                         synchronized(this) {
+                            if (api !== a) return
                             queue = PlaylistEdits.sent(queue, after?.changed)
-                            base = if (after == null) base.filter { it.id != e.playlistId } else base.map { if (it.id == after.id) after else it }
+                            if (e is PlaylistEdit.Delete) base = base.filter { it.id != e.playlistId }
+                            else if (after != null) base = base.map { if (it.id == after.id) after else it }
                         }
                     }
                 }
             } catch (x: SubsonicApi.SubsonicException) {
                 // The server refused it (not ours, a song it doesn't have…): drop it and say so.
                 Log.w(TAG, "Playlist change refused: ${x.message}")
-                synchronized(this) { queue = PlaylistEdits.dropPlaylist(queue, e.playlistId) }
+                synchronized(this) {
+                    if (api !== a) return
+                    queue = PlaylistEdits.dropPlaylist(queue, e.playlistId)
+                }
                 _notice.value = "The music server didn't take a playlist change: ${x.message}"
             } catch (x: Exception) {
                 Log.w(TAG, "Sending playlist changes: ${x.message}; will retry")
                 return
             } finally {
                 synchronized(this) {
-                    saveEdits()
-                    savePlaylists(base)
-                    publishPlaylists()
+                    if (api === a) {
+                        saveEdits()
+                        savePlaylists(base)
+                        publishPlaylists()
+                    }
                 }
             }
         }
@@ -367,29 +412,38 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         refreshJob = scope.launch { fetch() }
     }
 
-    private fun fetch() {
-        val a = api ?: return
+    private suspend fun fetch() = fetchMutex.withLock {
+        val a = api ?: return@withLock
+        val key = serverKey()
         _status.value = ServerStatus.Connecting
         try {
             val ping = a.ping()
             val extensions = if (ping.openSubsonic) a.extensions() else emptySet()
             val albums = a.albums()
             val songs = a.songs()
-            val tracks = SubsonicApi.toTracks(serverKey(), albums, songs)
-            if (api !== a) return // settings changed meanwhile
+            val tracks = SubsonicApi.toTracks(key, albums, songs)
+            if (api !== a) return@withLock // settings changed meanwhile
             _tracks.value = tracks
             LibraryCache.write(cacheFile, tracks)
-            prefs.edit { putString("savedFor", serverKey()) }
+            val supportsFormPost = "formPost" in extensions
+            formPost = supportsFormPost
+            prefs.edit {
+                putString("savedFor", key)
+                putString("formPostFor", key)
+                putBoolean("formPost", supportsFormPost)
+            }
             // Playlists: a server without them (or a failure here) keeps the songs working.
-            runCatching { a.playlists().mapNotNull { SubsonicApi.toPlaylist(serverKey(), a.username, it) } }
+            runCatching { a.playlists().mapNotNull { SubsonicApi.toPlaylist(key, a.username, it) } }
                 .onSuccess { lists ->
-                    if (api === a) {
-                        formPost = "formPost" in extensions
-                        setBase(lists)
-                        savePlaylists(lists)
+                    synchronized(this) {
+                        if (api === a) {
+                            setBase(lists)
+                            savePlaylists(lists)
+                        }
                     }
                 }
                 .onFailure { Log.w(TAG, "Server playlists: ${it.message}") }
+            if (api !== a) return@withLock
             val connectedStatus = ServerStatus.Connected(ping.type, ping.version, tracks.size, extensions)
             lastConnected = connectedStatus
             fetched = true
@@ -406,8 +460,10 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             startDownloads()
             startSending()
             Log.i(TAG, "Server: ${ping.type} ${ping.version}, ${albums.size} albums, ${tracks.size} songs, extensions $extensions")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (api !== a) return
+            if (api !== a) return@withLock
             Log.w(TAG, "Server: ${e.message}")
             gate.onFailure(SystemClock.elapsedRealtime())
             _connected.value = false
@@ -468,10 +524,19 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     override fun unpin(trackIds: Collection<String>) {
         val ids = trackIds.toSet()
         if (ids.none { it in _offline.value.pinned }) return
-        updatePinned { it - ids }
+        synchronized(offlineLock) {
+            updatePinned { it - ids }
+        }
         if (_offline.value.downloading in ids) downloadJob?.cancel()
         scope.launch {
-            ids.forEach { File(offlineDir, it).delete(); File(offlineDir, "$it.part").delete() }
+            synchronized(offlineLock) {
+                ids.forEach {
+                    if (it !in _offline.value.pinned) {
+                        File(offlineDir, it).delete()
+                        File(offlineDir, "$it.part").delete()
+                    }
+                }
+            }
             countBytes()
             if (api == null) _tracks.value = _tracks.value.filter { it.id !in ids }
             startDownloads()
@@ -495,24 +560,24 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     }
 
     /** Downloads pinned songs one at a time until they're all here or something's in the way. */
-    private suspend fun runDownloads() {
+    private suspend fun runDownloads() = downloadMutex.withLock {
         while (true) {
             val st = _offline.value
             val todo = st.pinned.filter { it !in st.ready }
-            if (todo.isEmpty()) return setWaiting(null)
-            val a = api ?: return setWaiting("Turn the music server on to download ${plural(todo.size)}")
-            if (meteredBlock() != null) return setWaiting("Waiting for Wi-Fi to download ${plural(todo.size)}")
-            if (!_connected.value) return setWaiting("Waiting for the music server to download ${plural(todo.size)}")
+            if (todo.isEmpty()) return@withLock setWaiting(null)
+            val a = api ?: return@withLock setWaiting("Turn the music server on to download ${plural(todo.size)}")
+            if (meteredBlock() != null) return@withLock setWaiting("Waiting for Wi-Fi to download ${plural(todo.size)}")
+            if (!_connected.value) return@withLock setWaiting("Waiting for the music server to download ${plural(todo.size)}")
             val byId = _tracks.value.associateBy { it.id }
             // Not in the server's list (yet, or any more): nothing to fetch for now.
-            val track = todo.firstNotNullOfOrNull(byId::get) ?: return setWaiting(null)
+            val track = todo.firstNotNullOfOrNull(byId::get) ?: return@withLock setWaiting(null)
             try {
                 download(a, track)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Downloading ${track.title}: ${e.message}")
-                return setWaiting("Can't reach the music server; ${plural(todo.size)} to download")
+                return@withLock setWaiting("Can't reach the music server; ${plural(todo.size)} to download")
             }
         }
     }
@@ -551,9 +616,14 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
                 }
             }
             if (done == 0L) throw IOException("empty")
-            if (t.id !in _offline.value.pinned || !part.renameTo(File(offlineDir, t.id))) return
-            _offline.update { it.copy(ready = it.ready + t.id) }
-            countBytes()
+            val committed = synchronized(offlineLock) {
+                if (t.id !in _offline.value.pinned || !part.renameTo(File(offlineDir, t.id))) false
+                else {
+                    _offline.update { it.copy(ready = it.ready + t.id) }
+                    true
+                }
+            }
+            if (committed) countBytes()
         } finally {
             c.disconnect()
             part.delete()
@@ -596,7 +666,9 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
     override fun checkNow() {
         scope.launch {
             val a = api ?: return@launch
-            if (probe(a)) {
+            val ok = probe(a)
+            if (api !== a) return@launch
+            if (ok) {
                 gate.connectNow()
                 if (!fetched) fetch() else setConnected(true)
             } else {
@@ -719,13 +791,14 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             }.getOrNull()?.let { return it }
         }
         val a = api ?: return null
+        if (meteredBlock() != null) return null
         if (track.serverCoverArt.isEmpty()) return null
         val c = URL(a.coverUrl(track.serverCoverArt, 1200)).openConnection() as HttpURLConnection
         return try {
             c.connectTimeout = 8_000
             c.readTimeout = 20_000
             if (c.responseCode != 200 || c.contentType?.startsWith("image/") != true) null
-            else c.inputStream.use { it.readBytes() }
+            else c.inputStream.use { SubsonicApi.readLimited(it, MAX_COVER_BYTES) }
         } catch (e: Exception) {
             null
         } finally {
@@ -735,6 +808,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
     private companion object {
         const val TAG = "LocalBeat"
+        const val MAX_COVER_BYTES = 16 * 1024 * 1024
         /** How long the server must answer without a failure before reconnecting. */
         const val STEADY_MS = 120_000L
         const val CONNECTED_EVERY_MS = 30_000L

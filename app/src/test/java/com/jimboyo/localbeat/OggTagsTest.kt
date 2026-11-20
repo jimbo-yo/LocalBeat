@@ -49,6 +49,30 @@ class OggTagsTest {
         RandomAccessFile(f, "r").channel.use { assertNull(OggTags.read(it)) }
     }
 
+    @Test
+    fun corruptPictureBlockDoesNotOomAndBlankDuplicateKeysFallThrough() {
+        // Huge mime length (0x7fffffff) in a tiny buffer must throw IOException, not OOM.
+        val badMime = ByteBuffer.allocate(8).putInt(3).putInt(Int.MAX_VALUE).array()
+        try {
+            OggTags.parsePictureBlock(badMime)
+            throw AssertionError("expected IOException")
+        } catch (_: java.io.IOException) { }
+
+        // Negative description length must throw IOException, not rewind the buffer.
+        val badDesc = ByteBuffer.allocate(16).putInt(3).putInt(0).putInt(-4).putInt(0).array()
+        try {
+            OggTags.parsePictureBlock(badDesc)
+            throw AssertionError("expected IOException")
+        } catch (_: java.io.IOException) { }
+
+        // Blank first value for a repeated key falls through to the non-blank value.
+        val file = writeOpus(listOf("ARTIST=   ", "ARTIST=Queen", "TITLE=Bohemian Rhapsody"))
+        RandomAccessFile(file, "r").channel.use { ch ->
+            val r = OggTags.read(ch)!!
+            assertEquals("Queen", r.comments["ARTIST"])
+        }
+    }
+
     /** Every Opus file in the real phone library (on this laptop) must parse. Older
      *  fre:ac-era rips have no embedded art; files that declare a picture must decode one. */
     @Test

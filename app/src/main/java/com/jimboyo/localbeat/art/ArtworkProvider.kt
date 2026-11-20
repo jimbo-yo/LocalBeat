@@ -24,7 +24,11 @@ class ArtworkProvider : ContentProvider() {
         val app = context!!.applicationContext as LocalBeatApp
         val library = runBlocking { app.library.awaitLibrary() }
         val album = library.album(segments[1]) ?: throw FileNotFoundException(uri.toString())
-        val file = app.art.file(album) ?: throw FileNotFoundException("No cover for ${album.title}")
+        val file = try {
+            app.art.file(album)
+        } catch (e: Exception) {
+            throw FileNotFoundException("Can't read cover for ${album.title}: ${e.message}")
+        } ?: throw FileNotFoundException("No cover for ${album.title}")
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     }
 

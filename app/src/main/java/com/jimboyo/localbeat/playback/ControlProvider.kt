@@ -102,7 +102,7 @@ class ControlProvider : ContentProvider() {
         val controller = try {
             future.get(10, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            future.cancel(true)
+            MediaController.releaseFuture(future)
             throw IllegalStateException("can't reach the player: ${e.message}")
         }
         try {
@@ -146,6 +146,12 @@ class ControlProvider : ContentProvider() {
      * pause and play once more. Seen on the Pixel 9, 2026-11-17.
      */
     private fun play(c: MediaController, arg: String?): JSONObject {
+        if (!arg.isNullOrBlank()) {
+            app.library.start()
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(10_000) { app.library.awaitShown() }
+            }
+        }
         onMain {
             if (!arg.isNullOrBlank()) {
                 c.setMediaItem(ControlArgs.item(arg))
@@ -237,9 +243,13 @@ object ControlArgs {
     /** "1:30", "90", "1:02:03", "90s", "1500ms" -> milliseconds. */
     fun millis(s: String): Long {
         val t = s.trim().lowercase()
-        if (t.endsWith("ms")) return t.removeSuffix("ms").trim().toLong()
+        if (t.endsWith("ms")) {
+            val ms = t.removeSuffix("ms").trim().toLong()
+            require(ms >= 0) { "a time like 1:30 or 90" }
+            return ms
+        }
         val parts = t.removeSuffix("s").split(':').map { it.trim().toDouble() }
-        require(parts.isNotEmpty() && parts.size <= 3 && parts.all { it >= 0 }) { "a time like 1:30 or 90" }
+        require(parts.isNotEmpty() && parts.size <= 3 && parts.all { it.isFinite() && it >= 0 }) { "a time like 1:30 or 90" }
         return (parts.fold(0.0) { acc, x -> acc * 60 + x } * 1000).toLong()
     }
 
@@ -269,8 +279,10 @@ object ControlArgs {
      */
     fun item(arg: String): MediaItem {
         val a = arg.trim()
-        val ids = listOf(BrowseTree.PLAYLIST, BrowseTree.ALBUM, BrowseTree.ARTIST, BrowseTree.TRACK, BrowseTree.GENRE, BrowseTree.DECADE)
-        if (!a.startsWith("search:") && ids.any { a.startsWith(it) }) return MediaItem.Builder().setMediaId(a).build()
+        val ids = listOf(BrowseTree.PLAYLIST, BrowseTree.ALBUM, BrowseTree.ARTIST, BrowseTree.ARTIST_ALL, BrowseTree.TRACK, BrowseTree.GENRE, BrowseTree.DECADE)
+        if (!a.startsWith("search:") && (a == BrowseTree.SONGS || ids.any { a.startsWith(it) })) {
+            return MediaItem.Builder().setMediaId(a).build()
+        }
         val words = a.removePrefix("search:").trim()
         return MediaItem.Builder()
             .setRequestMetadata(MediaItem.RequestMetadata.Builder().setSearchQuery(words).build())

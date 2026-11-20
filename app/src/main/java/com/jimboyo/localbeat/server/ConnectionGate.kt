@@ -7,6 +7,7 @@ package com.jimboyo.localbeat.server
  * monotonic clock (`SystemClock.elapsedRealtime()` in the app).
  */
 class ConnectionGate(private val steadyMs: Long, private val freshMs: Long = 60_000L) {
+    @Volatile
     var connected = false
         private set
     /** When the last failure was seen, or null if none since the last reset. */
@@ -20,11 +21,13 @@ class ConnectionGate(private val steadyMs: Long, private val freshMs: Long = 60_
      * the tunnel took a few tries to come up. Dropouts on mobile data don't call
      * this, so they still wait [steadyMs].
      */
+    @Synchronized
     fun newNetwork(now: Long) {
         if (!connected) freshUntil = now + freshMs
     }
 
     /** The server answered. Returns true if that (re)connects. */
+    @Synchronized
     fun onSuccess(now: Long): Boolean {
         if (connected) return false
         val fresh = freshUntil
@@ -41,6 +44,7 @@ class ConnectionGate(private val steadyMs: Long, private val freshMs: Long = 60_
     }
 
     /** The server didn't answer (or can't be used, e.g. on mobile data). Returns true if that disconnects. */
+    @Synchronized
     fun onFailure(now: Long): Boolean {
         lastFailureAt = now
         if (!connected) return false
@@ -49,12 +53,15 @@ class ConnectionGate(private val steadyMs: Long, private val freshMs: Long = 60_
     }
 
     /** Connected right now, without waiting (the user asked, or a fresh connection succeeded). */
+    @Synchronized
     fun connectNow() {
         connected = true
         lastFailureAt = null
+        freshUntil = null
     }
 
     /** Back to the start: not connected, no history (server turned off or settings changed). */
+    @Synchronized
     fun reset() {
         connected = false
         lastFailureAt = null

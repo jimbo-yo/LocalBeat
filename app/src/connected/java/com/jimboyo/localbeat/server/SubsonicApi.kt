@@ -55,8 +55,8 @@ internal class SubsonicApi(
             c.connectTimeout = 8_000
             c.readTimeout = 30_000
             val code = c.responseCode
-            val body = (if (code >= 400) c.errorStream else c.inputStream)?.use { String(it.readBytes(), Charsets.UTF_8) }.orEmpty()
-            if (code >= 400 && body.isBlank()) throw IOException("HTTP $code from the server")
+            val body = (if (code >= 400) c.errorStream else c.inputStream)?.use { String(readLimited(it, MAX_JSON_BYTES), Charsets.UTF_8) }.orEmpty()
+            if (code >= 400 && !body.trimStart().startsWith("{")) throw IOException("HTTP $code from the server")
             return parseResponse(body)
         } finally {
             c.disconnect()
@@ -77,8 +77,8 @@ internal class SubsonicApi(
             c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             c.outputStream.use { it.write(params.joinToString("&") { (k, v) -> "$k=${enc(v)}" }.toByteArray(Charsets.UTF_8)) }
             val code = c.responseCode
-            val body = (if (code >= 400) c.errorStream else c.inputStream)?.use { String(it.readBytes(), Charsets.UTF_8) }.orEmpty()
-            if (code >= 400 && body.isBlank()) throw IOException("HTTP $code from the server")
+            val body = (if (code >= 400) c.errorStream else c.inputStream)?.use { String(readLimited(it, MAX_JSON_BYTES), Charsets.UTF_8) }.orEmpty()
+            if (code >= 400 && !body.trimStart().startsWith("{")) throw IOException("HTTP $code from the server")
             return parseResponse(body)
         } finally {
             c.disconnect()
@@ -125,7 +125,7 @@ internal class SubsonicApi(
         return try {
             c.connectTimeout = 5_000
             c.readTimeout = 5_000
-            c.responseCode == 200 && parseResponse(c.inputStream.use { String(it.readBytes(), Charsets.UTF_8) }).let { true }
+            c.responseCode == 200 && parseResponse(c.inputStream.use { String(readLimited(it, 1024 * 1024), Charsets.UTF_8) }).let { true }
         } catch (e: Exception) {
             false
         } finally {
@@ -161,16 +161,27 @@ internal class SubsonicApi(
         val list = call("getPlaylists").optJSONObject("playlists")?.optJSONArray("playlist") ?: return emptyList()
         return (0 until list.length()).mapNotNull { i ->
             val id = list.getJSONObject(i).optString("id").ifEmpty { return@mapNotNull null }
-            call("getPlaylist", listOf("id" to id)).optJSONObject("playlist")
+            playlist(id)
         }
     }
 
     private fun paged(page: (Int) -> JSONArray?): List<JSONObject> {
         val out = ArrayList<JSONObject>()
-        while (true) {
+        val seen = HashSet<String>()
+        var pages = 0
+        while (pages < MAX_PAGES) {
             val a = page(out.size) ?: break
-            for (i in 0 until a.length()) out += a.getJSONObject(i)
-            if (a.length() < PAGE) break
+            var added = 0
+            for (i in 0 until a.length()) {
+                val obj = a.getJSONObject(i)
+                val id = obj.optString("id")
+                if (id.isEmpty() || seen.add(id)) {
+                    out += obj
+                    added++
+                }
+            }
+            pages++
+            if (a.length() < PAGE || added == 0) break
         }
         return out
     }
@@ -179,7 +190,24 @@ internal class SubsonicApi(
         const val API_VERSION = "1.16.1"
         const val CLIENT = "LocalBeat"
         private const val PAGE = 500
+        private const val MAX_PAGES = 1_000
+        private const val MAX_JSON_BYTES = 32 * 1024 * 1024
         private val random = SecureRandom()
+
+        /** Reads up to [maxBytes] from [input], throwing [IOException] if exceeded. */
+        fun readLimited(input: java.io.InputStream, maxBytes: Int): ByteArray {
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(16 * 1024)
+            var total = 0
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                total += n
+                if (total > maxBytes) throw IOException("Response too large")
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
+        }
 
         /** "10.8.0.1:4533/" -> "http://10.8.0.1:4533" */
         fun normalize(address: String): String {

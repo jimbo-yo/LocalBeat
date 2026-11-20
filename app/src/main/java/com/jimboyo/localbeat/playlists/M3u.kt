@@ -34,16 +34,20 @@ data class Playlist(
  * to the laptop works against ~/Music/phone as well.
  */
 object M3u {
+    private fun oneLine(s: String) = s.replace('\r', ' ').replace('\n', ' ')
+
     fun write(name: String, entries: List<String>, lib: Library?): String = buildString {
         append("#EXTM3U\n")
-        append("#PLAYLIST:").append(name.replace('\n', ' ')).append('\n')
+        append("#PLAYLIST:").append(oneLine(name)).append('\n')
         for (rel in entries) {
             val t = lib?.trackByRelativePath(rel)
             if (t != null) {
                 append("#EXTINF:").append(t.durationMs / 1000).append(',')
-                append(t.artist.ifBlank { t.filedUnder }).append(" - ").append(t.title).append('\n')
+                append(oneLine(t.artist.ifBlank { t.filedUnder })).append(" - ").append(oneLine(t.title)).append('\n')
             }
-            append(rel).append('\n')
+            // Paths starting with '#' would be read back as M3U comments; './' is standard relative syntax.
+            val safeRel = oneLine(rel).let { if (it.startsWith("#")) "./$it" else it }
+            append(safeRel).append('\n')
         }
     }
 
@@ -52,13 +56,13 @@ object M3u {
     fun parse(text: String): Parsed {
         var name: String? = null
         val paths = ArrayList<String>()
-        for (raw in text.removePrefix("﻿").lineSequence()) {
+        for (raw in text.removePrefix("\uFEFF").lineSequence()) {
             val line = raw.trim()
             when {
                 line.isEmpty() -> Unit
                 line.startsWith("#PLAYLIST:") -> name = line.removePrefix("#PLAYLIST:").trim().ifEmpty { null }
                 line.startsWith("#") -> Unit
-                else -> paths += line
+                else -> paths += if (line.startsWith("./")) line.removePrefix("./") else line
             }
         }
         return Parsed(name, paths)

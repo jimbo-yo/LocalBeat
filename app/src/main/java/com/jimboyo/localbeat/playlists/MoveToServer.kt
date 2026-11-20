@@ -34,7 +34,13 @@ object MoveToServer {
     }
 
     /** "Artist/Album/01. Artist - Title.opus" -> "artist/album/01. artist - title" */
-    private fun pathKey(path: String): String = path.substringBeforeLast('.').lowercase(Locale.ROOT)
+    internal fun pathKey(path: String): String {
+        val norm = path.replace('\\', '/')
+        val slash = norm.lastIndexOf('/')
+        val dot = norm.lastIndexOf('.')
+        val noExt = if (dot > slash) norm.substring(0, dot) else norm
+        return noExt.lowercase(Locale.ROOT)
+    }
 
     private fun nameKey(t: Track) = fold(t.artist.ifBlank { t.filedUnder }) + "\u0000" + fold(t.title)
 }

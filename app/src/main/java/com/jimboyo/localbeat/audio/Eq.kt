@@ -79,11 +79,12 @@ object Eq {
     }
 
     /** The highest point of the curve: that much is taken off the volume so boosts can't clip. */
-    fun peakDb(gains: List<Float>): Double {
+    fun peakDb(gains: List<Float>, sampleRate: Int = 48_000): Double {
         if (gains.all { it <= 0f }) return 0.0
         var peak = 0.0
+        val maxF = minOf(20_000.0, sampleRate * 0.45)
         var f = 20.0
-        while (f <= 20_000) { peak = max(peak, responseDb(gains, f)); f *= 1.03 }
+        while (f <= maxF) { peak = max(peak, responseDb(gains, f, sampleRate)); f *= 1.03 }
         return peak
     }
 }

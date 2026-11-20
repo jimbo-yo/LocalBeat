@@ -3,6 +3,7 @@ package com.jimboyo.localbeat.ui
 import android.content.ComponentName
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.media3.common.MediaItem
@@ -37,9 +38,13 @@ class PlayerConnection(private val context: Context) {
         private set
     var queue by mutableStateOf<List<QueueEntry>>(emptyList())
         private set
+    /** Incremented on seeks / discontinuities so paused seek bars refresh immediately. */
+    var positionRevision by mutableIntStateOf(0)
+        private set
 
     private val listener = object : Player.Listener {
-        override fun onEvents(player: Player, events: Player.Events) = sync(player)
+        override fun onEvents(player: Player, events: Player.Events) =
+            sync(player, timelineChanged = events.contains(Player.EVENT_TIMELINE_CHANGED), positionChanged = events.contains(Player.EVENT_POSITION_DISCONTINUITY))
     }
 
     fun connect() {
@@ -48,6 +53,7 @@ class PlayerConnection(private val context: Context) {
         val f = MediaController.Builder(context, token).buildAsync()
         future = f
         f.addListener({
+            if (future !== f) return@addListener
             val c = runCatching { f.get() }.getOrNull() ?: return@addListener
             c.addListener(listener)
             controller = c
@@ -69,25 +75,27 @@ class PlayerConnection(private val context: Context) {
     }
 
     fun release() {
+        controller?.removeListener(listener)
         future?.let(MediaController::releaseFuture)
         future = null
         controller = null
     }
 
-    private fun sync(p: Player) {
+    private fun sync(p: Player, timelineChanged: Boolean = false, positionChanged: Boolean = false) {
         currentTrackId = p.currentMediaItem?.mediaId?.let(BrowseTree::trackIdOf)
         currentIndex = p.currentMediaItemIndex
         isPlaying = p.isPlaying
         shuffle = p.shuffleModeEnabled
         repeatMode = p.repeatMode
         durationMs = p.duration.coerceAtLeast(0)
+        if (positionChanged) positionRevision++
         val seen = HashMap<String, Int>()
         val q = List(p.mediaItemCount) { i ->
             val id = BrowseTree.trackIdOf(p.getMediaItemAt(i).mediaId).orEmpty()
             val n = seen.merge(id, 1, Int::plus)!!
             QueueEntry("$id#$n", id)
         }
-        if (q != queue) queue = q
+        if (timelineChanged || q != queue) queue = q
     }
 
     val positionMs: Long get() = controller?.currentPosition ?: 0
@@ -115,9 +123,15 @@ class PlayerConnection(private val context: Context) {
         c.addMediaItem(item(mediaId))
     }
 
-    fun skipTo(index: Int) = controller?.let { it.seekToDefaultPosition(index); it.play() }
-    fun removeAt(index: Int) = controller?.removeMediaItem(index)
-    fun move(from: Int, to: Int) = controller?.moveMediaItem(from, to)
+    fun skipTo(index: Int) = controller?.let {
+        if (index in 0 until it.mediaItemCount) { it.seekToDefaultPosition(index); it.play() }
+    }
+    fun removeAt(index: Int) = controller?.let {
+        if (index in 0 until it.mediaItemCount) it.removeMediaItem(index)
+    }
+    fun move(from: Int, to: Int) = controller?.let {
+        if (from in 0 until it.mediaItemCount && to in 0 until it.mediaItemCount && from != to) it.moveMediaItem(from, to)
+    }
     /** Empties the queue except the song that's playing. */
     fun clearUpcoming() {
         val c = controller ?: return
@@ -135,7 +149,10 @@ class PlayerConnection(private val context: Context) {
 
     fun next() = controller?.seekToNextMediaItem()
     fun previous() = controller?.seekToPrevious()
-    fun seekTo(ms: Long) = controller?.seekTo(ms)
+    fun seekTo(ms: Long) {
+        controller?.seekTo(ms)
+        positionRevision++
+    }
     fun toggleShuffle() { controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled } }
     fun cycleRepeat() {
         val c = controller ?: return

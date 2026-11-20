@@ -135,7 +135,9 @@ private fun EqGraph(gains: List<Float>, enabled: Boolean, modifier: Modifier, on
         modifier.pointerInput(Unit) {
             val pad = 14.dp.toPx()
             fun dbAt(y: Float): Float {
-                val db = Eq.MAX_DB - (y - pad) / (size.height - 2 * pad) * 2 * Eq.MAX_DB
+                val span = size.height - 2 * pad
+                if (span <= 0f) return 0f
+                val db = Eq.MAX_DB - (y - pad) / span * 2 * Eq.MAX_DB
                 return ((db * 2).roundToInt() / 2f).coerceIn(-Eq.MAX_DB, Eq.MAX_DB) // half-dB steps
             }
             awaitEachGesture {

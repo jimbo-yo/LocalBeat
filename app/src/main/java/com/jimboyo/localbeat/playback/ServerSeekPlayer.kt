@@ -56,6 +56,7 @@ class ServerSeekPlayer(
         super.isCommandAvailable(command) || (command == Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM && currentIsServerSong())
 
     override fun addListener(listener: Player.Listener) {
+        if (listener in listeners) return
         val wrapped = CommandsListener(listener)
         listeners[listener] = wrapped
         super.addListener(wrapped)
@@ -68,10 +69,23 @@ class ServerSeekPlayer(
      */
     @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
     private inner class CommandsListener(private val l: Player.Listener) : Player.Listener {
-        override fun onAvailableCommandsChanged(availableCommands: Player.Commands) = l.onAvailableCommandsChanged(withServerSeek(availableCommands))
+        private var lastCommands: Player.Commands? = null
+
+        private fun emitCommands(commands: Player.Commands) {
+            val effective = withServerSeek(commands)
+            if (effective != lastCommands) {
+                lastCommands = effective
+                l.onAvailableCommandsChanged(effective)
+            }
+        }
+
+        override fun onAvailableCommandsChanged(availableCommands: Player.Commands) = emitCommands(availableCommands)
         override fun onEvents(player: Player, events: Player.Events) = l.onEvents(player, events)
         override fun onTimelineChanged(timeline: Timeline, reason: Int) = l.onTimelineChanged(timeline, reason)
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) = l.onMediaItemTransition(mediaItem, reason)
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            l.onMediaItemTransition(mediaItem, reason)
+            emitCommands(super@ServerSeekPlayer.getAvailableCommands())
+        }
         override fun onTracksChanged(tracks: Tracks) = l.onTracksChanged(tracks)
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) = l.onMediaMetadataChanged(mediaMetadata)
         override fun onPlaylistMetadataChanged(mediaMetadata: MediaMetadata) = l.onPlaylistMetadataChanged(mediaMetadata)
@@ -118,6 +132,23 @@ class ServerSeekPlayer(
 
     override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
         if (mediaItemIndex != currentMediaItemIndex || !reloadAt(mediaItemIndex, positionMs)) super.seekTo(mediaItemIndex, positionMs)
+    }
+
+    override fun seekToDefaultPosition() {
+        if (!reloadAt(currentMediaItemIndex, 0L)) super.seekToDefaultPosition()
+    }
+
+    override fun seekForward() {
+        val target = (currentPosition + seekForwardIncrement).let { t ->
+            val d = duration
+            if (d > 0) t.coerceAtMost(d) else t
+        }
+        if (!reloadAt(currentMediaItemIndex, target)) super.seekForward()
+    }
+
+    override fun seekBack() {
+        val target = (currentPosition - seekBackIncrement).coerceAtLeast(0L)
+        if (!reloadAt(currentMediaItemIndex, target)) super.seekBack()
     }
 
     /** True if handled: the seek either reloaded the song, or can't happen yet. */

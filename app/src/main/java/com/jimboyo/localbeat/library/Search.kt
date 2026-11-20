@@ -24,10 +24,14 @@ object Search {
         )
     }
 
+    private val COMBINING_MARKS = Regex("\\p{M}+")
+    private val NON_ALNUM = Regex("[^\\p{L}\\p{N} ]")
+    private val SPACES = Regex("\\s+")
+
     /** Lowercase, folded quotes, no accents or punctuation, single spaces. */
     fun key(s: String): String =
-        Normalizer.normalize(fold(s), Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
-            .replace(Regex("[^\\p{L}\\p{N} ]"), "").replace(Regex("\\s+"), " ").trim()
+        Normalizer.normalize(fold(s), Normalizer.Form.NFD).replace(COMBINING_MARKS, "")
+            .replace(NON_ALNUM, "").replace(SPACES, " ").trim()
 
     /** 3 exact, 2 starts with, 1 a word starts with, 0.5 contains, 0.25 every word somewhere, 0 no match. */
     fun score(name: String, context: String, q: String, words: List<String>): Double {

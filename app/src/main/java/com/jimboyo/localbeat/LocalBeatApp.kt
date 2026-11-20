@@ -61,9 +61,21 @@ class LocalBeatApp : Application() {
             }
         }
 
-        // After each scan, drop covers of albums that changed or are gone.
+        // After each scan, drop covers of albums that changed or are gone
+        // (skip pruning while an enabled server hasn't loaded its catalogue yet).
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            library.generation.drop(1).collect { library.library.value?.let { art.prune(it.albums) } }
+            library.generation.drop(1).collect {
+                val waitingForServer = server?.let { it.settings.value.enabled && it.tracks.value.isEmpty() } == true
+                if (!waitingForServer) {
+                    library.library.value?.let { art.prune(it.albums) }
+                    com.jimboyo.localbeat.ui.ArtMemory.clear()
+                }
+            }
         }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        com.jimboyo.localbeat.ui.ArtMemory.trim(level)
     }
 }

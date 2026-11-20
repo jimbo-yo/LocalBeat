@@ -108,8 +108,8 @@ enum class BrowseTab(val label: String) { GENRES("Genres"), DECADES("Decades"), 
 class Ui(
     val app: LocalBeatApp,
     val player: PlayerConnection,
-    val importPlaylist: () -> Unit,
-    val sharePlaylist: (Playlist) -> Unit,
+    var importPlaylist: () -> Unit = {},
+    var sharePlaylist: (Playlist) -> Unit = {},
 ) {
     /** Pages opened on top of the current destination (album, artist, Now Playing…). */
     val stack = mutableStateListOf<Screen>()
@@ -145,10 +145,15 @@ class Ui(
         } else if (dest != Dest.ALBUMS) dest = Dest.ALBUMS
     }
 
-    /** Bottom bar tap: that destination's main list (tapping it again also comes back to it). */
-    fun go(d: Dest) {
+    /** Clears all stacked pages and their saved scroll states. */
+    fun clearStack() {
         stack.indices.forEach { savedStates?.removeState(pageKey(it)) }
         stack.clear()
+    }
+
+    /** Bottom bar tap: that destination's main list (tapping it again also comes back to it). */
+    fun go(d: Dest) {
+        clearStack()
         dest = d
     }
 
@@ -205,10 +210,10 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                     !hasPermission -> Message("LocalBeat needs access to your music files.", "Allow access", onGrant)
                     library == null -> Unit
                     all.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan(); ui.app.server?.refresh() }
-                    top is Screen.AlbumPage -> lib.album(top.id)?.let { AlbumPage(ui, lib, it) }
-                    top is Screen.ArtistPage -> lib.artist(top.id)?.let { ArtistPage(ui, lib, it) }
-                    top is Screen.GenrePage -> lib.genre(top.id)?.let { GroupPage(ui, it, BrowseTree.GENRE + it.id) }
-                    top is Screen.DecadePage -> lib.decade(top.id)?.let { GroupPage(ui, it, BrowseTree.DECADE + it.id) }
+                    top is Screen.AlbumPage -> lib.album(top.id)?.let { AlbumPage(ui, lib, it) } ?: Message("This album isn't available right now.", "Back", ui::back)
+                    top is Screen.ArtistPage -> lib.artist(top.id)?.let { ArtistPage(ui, lib, it) } ?: Message("This artist isn't available right now.", "Back", ui::back)
+                    top is Screen.GenrePage -> lib.genre(top.id)?.let { GroupPage(ui, it, BrowseTree.GENRE + it.id) } ?: Message("This genre isn't available right now.", "Back", ui::back)
+                    top is Screen.DecadePage -> lib.decade(top.id)?.let { GroupPage(ui, it, BrowseTree.DECADE + it.id) } ?: Message("This decade isn't available right now.", "Back", ui::back)
                     top is Screen.PlaylistPage -> PlaylistPage(ui, lib, top.id)
                     else -> when (ui.dest) {
                         Dest.ALBUMS -> AlbumGrid(ui, lib.albums, fastScroll = true) { it.artist }
@@ -423,11 +428,11 @@ private fun Toggle(icon: ImageVector, label: String, on: Boolean, onClick: () ->
     }
 }
 
-/** Polls the playback position while playing. */
+/** Polls the playback position while playing, and refreshes immediately on seeks. */
 @Composable
 private fun Progress(player: PlayerConnection, content: @Composable (positionMs: Long, durationMs: Long) -> Unit) {
     var pos by remember { mutableLongStateOf(player.positionMs) }
-    LaunchedEffect(player.isPlaying, player.currentTrackId, player.controller) {
+    LaunchedEffect(player.isPlaying, player.currentTrackId, player.controller, player.positionRevision) {
         pos = player.positionMs
         while (player.isPlaying) { delay(500); pos = player.positionMs }
     }

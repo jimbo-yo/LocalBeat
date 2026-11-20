@@ -91,4 +91,15 @@ class ConnectionGateTest {
         assertFalse(g.connected)
         assertTrue("reset forgets the last failure", g.onSuccess(2_000))
     }
+
+    @Test fun connectNowClearsStaleFreshUntil() {
+        val g = ConnectionGate(steady)
+        g.newNetwork(10_000)
+        g.connectNow()
+        assertTrue(g.connected)
+        // Drops 10 s later, well within the old 60 s freshUntil window: must wait steadyMs now.
+        assertTrue(g.onFailure(20_000))
+        assertFalse(g.onSuccess(25_000))
+        assertTrue(g.onSuccess(20_000 + steady))
+    }
 }

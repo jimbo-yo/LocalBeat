@@ -9,6 +9,7 @@ class QueueStore(context: Context) {
 
     class Saved(val trackIds: List<String>, val index: Int, val positionMs: Long, val shuffle: Boolean, val repeatMode: Int)
 
+    @Synchronized
     fun save(s: Saved) = prefs.edit {
         putString("ids", s.trackIds.joinToString("\n"))
         putInt("index", s.index)

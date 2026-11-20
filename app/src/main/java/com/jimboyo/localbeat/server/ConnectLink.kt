@@ -15,6 +15,8 @@ import java.net.URLDecoder
  * without Android.
  */
 data class ConnectLink(val address: String, val username: String, val password: String) {
+    override fun toString(): String = "ConnectLink(address=$address, username=$username, password=***)"
+
     companion object {
         /** The link's settings, or null if it isn't a valid `localbeat://connect` link. */
         fun parse(link: String): ConnectLink? {

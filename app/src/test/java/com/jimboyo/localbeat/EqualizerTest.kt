@@ -87,6 +87,8 @@ class EqualizerTest {
         assertEquals(6.0, Eq.responseDb(g, 250.0), 0.2)
         assertEquals(0.0, Eq.responseDb(g, 8000.0), 0.2)
         assertEquals(0.0, Eq.peakDb(Eq.FLAT), 0.0)
+        // At 22.05 kHz, the 16 kHz band is above Nyquist*0.45 and bypassed, so peakDb must be 0.
+        assertEquals(0.0, Eq.peakDb(gains(9 to 10f), sampleRate = 22_050), 0.01)
         Eq.PRESETS.forEach { assertEquals(it.name, Eq.BANDS, it.gains.size) }
     }
 }

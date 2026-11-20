@@ -76,17 +76,24 @@ fun BoxScope.FastScroll(names: List<String>, scrollTo: suspend (Int) -> Unit) {
         Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(FastScrollWidth).padding(vertical = 8.dp)
             .onSizeChanged { height = it.height.coerceAtLeast(1) }
             .pointerInput(index) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    pick(down.position.y)
-                    down.consume()
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        pick(change.position.y)
-                        change.consume()
+                try {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        pick(down.position.y)
+                        down.consume()
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                pick(change.position.y)
+                                change.consume()
+                            }
+                        } finally {
+                            active = null
+                        }
                     }
+                } finally {
                     active = null
                 }
             },
@@ -102,6 +109,7 @@ fun BoxScope.FastScroll(names: List<String>, scrollTo: suspend (Int) -> Unit) {
         }
     }
     active?.let { i ->
+        val letter = index.getOrNull(i)?.first ?: return@let
         // The letter, big, beside the finger.
         Box(
             Modifier.align(Alignment.TopEnd)
@@ -109,7 +117,7 @@ fun BoxScope.FastScroll(names: List<String>, scrollTo: suspend (Int) -> Unit) {
                 .size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Text(index[i].first.toString(), fontSize = 36.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(letter.toString(), fontSize = 36.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.jimboyo.localbeat.ui
 
 import android.Manifest
+import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -12,6 +13,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.jimboyo.localbeat.LocalBeatApp
@@ -38,14 +41,23 @@ import com.jimboyo.localbeat.server.ServerSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+
+/** Survives configuration changes (rotation, split-screen, theme/font changes) so navigation and dialogs stay put. */
+class MainViewModel(application: Application) : AndroidViewModel(application) {
+    val player = PlayerConnection(application)
+    val ui = Ui(application as LocalBeatApp, player)
+    /** A `localbeat://connect` link waiting for the user to confirm it. */
+    var connectOffer by mutableStateOf<ConnectLink?>(null)
+}
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as LocalBeatApp
-    private lateinit var player: PlayerConnection
-    private lateinit var ui: Ui
+    private val vm: MainViewModel by viewModels()
+    private val player get() = vm.player
+    private val ui get() = vm.ui
     private var hasPermission by mutableStateOf(false)
-    /** A `localbeat://connect` link waiting for the user to confirm it. */
-    private var connectOffer by mutableStateOf<ConnectLink?>(null)
 
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         if (result[Manifest.permission.READ_MEDIA_AUDIO] == true) {
@@ -60,8 +72,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        player = PlayerConnection(this)
-        ui = Ui(app, player, importPlaylist = { pickPlaylist.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "application/x-mpegurl", "application/octet-stream", "text/plain")) }, sharePlaylist = ::share)
+        ui.importPlaylist = {
+            pickPlaylist.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "application/x-mpegurl", "application/octet-stream", "text/plain"))
+        }
+        ui.sharePlaylist = ::share
         hasPermission = checkSelfPermission(Manifest.permission.READ_MEDIA_AUDIO) == PackageManager.PERMISSION_GRANTED
         app.library.start()
         if (!hasPermission) askPermissions()
@@ -83,11 +97,18 @@ class MainActivity : ComponentActivity() {
             }
             LocalBeatTheme(mode, colors, font) {
                 LocalBeatUi(ui, hasPermission, onGrant = ::askPermissions)
-                connectOffer?.let { link ->
-                    ConnectDialog(link, app.server?.settings?.value, onUse = { useServer(link) }, onDismiss = { connectOffer = null })
+                vm.connectOffer?.let { link ->
+                    ConnectDialog(link, app.server?.settings?.value, onUse = { useServer(link) }, onDismiss = { vm.connectOffer = null })
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        ui.importPlaylist = {}
+        ui.sharePlaylist = {}
+        ui.savedStates = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -107,7 +128,7 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_VIEW && data?.scheme.equals("localbeat", ignoreCase = true)) {
             if (app.server == null) return // the offline edition: no server
             val link = ConnectLink.parse(data.toString())
-            if (link == null) ui.toast("That isn't a valid LocalBeat server link") else connectOffer = link
+            if (link == null) ui.toast("That isn't a valid LocalBeat server link") else vm.connectOffer = link
             return
         }
         val uri = when (intent?.action) {
@@ -120,7 +141,7 @@ class MainActivity : ComponentActivity() {
 
     /** Confirmed: the link's server, user and secret, and the server turned on. */
     private fun useServer(link: ConnectLink) {
-        connectOffer = null
+        vm.connectOffer = null
         val server = app.server ?: return
         server.update(server.settings.value.copy(enabled = true, address = link.address, username = link.username, password = link.password))
         ui.toast("Music server set: ${link.username} at ${link.address}")
@@ -130,7 +151,20 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    val text = contentResolver.openInputStream(uri)!!.use { String(it.readBytes(), Charsets.UTF_8) }
+                    val stream = contentResolver.openInputStream(uri) ?: throw IOException("Can't open playlist")
+                    val text = stream.use { input ->
+                        val out = ByteArrayOutputStream()
+                        val buf = ByteArray(16 * 1024)
+                        var total = 0
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            total += n
+                            if (total > MAX_PLAYLIST_BYTES) throw IOException("Playlist file is too large")
+                            out.write(buf, 0, n)
+                        }
+                        String(out.toByteArray(), Charsets.UTF_8)
+                    }
                     val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
                         if (c.moveToFirst()) c.getString(0) else null
                     }
@@ -139,10 +173,14 @@ class MainActivity : ComponentActivity() {
             }
             result.onSuccess { (playlist, missing) ->
                 ui.toast(if (missing == 0) "Imported “${playlist.name}”" else "Imported “${playlist.name}”: $missing songs aren't on this phone")
-                ui.stack.clear()
+                ui.clearStack()
                 ui.open(Screen.PlaylistPage(playlist.id))
             }.onFailure { ui.toast("Couldn't read that playlist") }
         }
+    }
+
+    private companion object {
+        const val MAX_PLAYLIST_BYTES = 2 * 1024 * 1024
     }
 
     private fun share(p: Playlist) {

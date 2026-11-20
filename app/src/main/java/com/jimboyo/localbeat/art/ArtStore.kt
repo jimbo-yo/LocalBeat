@@ -30,15 +30,24 @@ class ArtStore(
     /** The album's cover file, extracting it on first use. Null if no file has a picture. Blocking. */
     fun file(album: Album): File? {
         val source = album.tracks.firstOrNull { it.hasEmbeddedArt } ?: return null
+        dir.mkdirs()
         val file = File(dir, "${album.id}-${source.modified}.img")
         if (file.exists()) return file
         val bytes = runCatching { extract(source) }
             .onFailure { Log.w("LocalBeat", "Can't read cover: ${source.path}", it) }
             .getOrNull() ?: return null
-        val tmp = File.createTempFile(album.id, ".tmp", dir)
-        tmp.writeBytes(bytes)
-        tmp.renameTo(file)
-        return file
+        val tmp = runCatching { File.createTempFile(album.id, ".tmp", dir) }.getOrNull() ?: return null
+        return try {
+            tmp.writeBytes(bytes)
+            if (tmp.renameTo(file) || file.exists()) file
+            else {
+                tmp.delete()
+                null
+            }
+        } catch (e: Exception) {
+            tmp.delete()
+            null
+        }
     }
 
     private fun extract(track: Track): ByteArray? {
@@ -61,6 +70,6 @@ class ArtStore(
     /** Deletes cached covers that no longer match an album in the library. */
     fun prune(albums: List<Album>) {
         val keep = albums.mapNotNull { a -> a.tracks.firstOrNull { it.hasEmbeddedArt }?.let { "${a.id}-${it.modified}.img" } }.toSet()
-        dir.listFiles()?.forEach { if (it.name !in keep) it.delete() }
+        dir.listFiles()?.forEach { if (!it.name.endsWith(".tmp") && it.name !in keep) it.delete() }
     }
 }

@@ -31,6 +31,7 @@ class ReorderState<T>(private val listState: LazyListState) {
     var offset by mutableFloatStateOf(0f)
         private set
     private var from = -1
+    private var currentIndex = -1
 
     /** What to display: the source, or the dragged order while it is pending. */
     val items: List<T> get() = override?.takeIf { overrideBase === source } ?: source
@@ -39,6 +40,7 @@ class ReorderState<T>(private val listState: LazyListState) {
         val list = items
         from = list.indexOfFirst { keyOf(it) == key }
         if (from < 0) return
+        currentIndex = from
         override = list
         overrideBase = source
         draggingKey = key
@@ -51,14 +53,17 @@ class ReorderState<T>(private val listState: LazyListState) {
         offset += dy
         val infos = listState.layoutInfo.visibleItemsInfo
         val cur = infos.firstOrNull { it.key == key } ?: return
+        val ci = cur.index - headerCount
+        // Wait for layout to reflect the previous swap before processing another swap in the same frame.
+        if (ci != currentIndex || ci !in list.indices) return
         val center = cur.offset + offset + cur.size / 2f
         val target = infos.firstOrNull {
             it.key != key && (it.index - headerCount) in list.indices && center > it.offset && center < it.offset + it.size
         } ?: return
-        val ci = cur.index - headerCount
         val ti = target.index - headerCount
-        if (ci !in list.indices) return
+        if (ti == ci) return
         override = list.toMutableList().apply { add(ti, removeAt(ci)) }
+        currentIndex = ti
         offset -= (target.offset - cur.offset)
     }
 
@@ -66,8 +71,16 @@ class ReorderState<T>(private val listState: LazyListState) {
         val key = draggingKey ?: return
         val to = override?.indexOfFirst { keyOf(it) == key } ?: -1
         draggingKey = null
+        currentIndex = -1
         offset = 0f
-        if (from >= 0 && to >= 0 && from != to) onMove(from, to) else override = null
+        if (from >= 0 && to >= 0 && from != to) {
+            onMove(from, to)
+            // If source didn't synchronously change and the list has no pending IPC update, keep override until source updates;
+            // if moving identical items (no-op), drop override right away.
+            if (override == source) override = null
+        } else {
+            override = null
+        }
     }
 
     /** For the dragged row: lifts it above the others and follows the finger. */

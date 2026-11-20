@@ -90,7 +90,7 @@ class LibraryRepository(private val context: Context) {
         if (started) return
         started = true
         scope.launch {
-            LibraryCache.read(cacheFile)?.let(::publish)
+            LibraryCache.read(cacheFile)?.let(::publishCache)
             mutex.withLock {
                 scan()
                 if (hasPermission()) {
@@ -135,7 +135,7 @@ class LibraryRepository(private val context: Context) {
     @Synchronized
     private fun republish() {
         phoneTracks?.let(::publish)
-        _generation.value++
+        _generation.value = _generation.value + 1
     }
 
     /**
@@ -164,20 +164,27 @@ class LibraryRepository(private val context: Context) {
             val rows = queryMediaStore()
             val io = Dispatchers.IO.limitedParallelism(4)
             val parsed = java.util.concurrent.atomic.AtomicInteger()
-            val tracks = rows.map { row ->
-                scope.async(io) {
+            val tracks = kotlinx.coroutines.coroutineScope {
+                val results = arrayOfNulls<Track>(rows.size)
+                val jobs = ArrayList<kotlinx.coroutines.Job>()
+                for (idx in rows.indices) {
+                    val row = rows[idx]
                     val old = known[row.path]
                     if (old != null && old.modified == row.modified && old.size == row.size) {
-                        old.copy(mediaStoreId = row.id, durationMs = row.durationMs, dateAdded = row.dateAdded)
+                        results[idx] = old.copy(mediaStoreId = row.id, durationMs = row.durationMs, dateAdded = row.dateAdded)
                     } else {
-                        parsed.incrementAndGet()
-                        readTrack(row)
+                        jobs += launch(io) {
+                            parsed.incrementAndGet()
+                            results[idx] = readTrack(row)
+                        }
                     }
                 }
-            }.awaitAll()
+                jobs.forEach { it.join() }
+                results.map { it!! }
+            }
             publish(tracks)
             LibraryCache.write(cacheFile, tracks)
-            _generation.value++
+            synchronized(this) { _generation.value = _generation.value + 1 }
             Log.i(TAG, "Scan: ${tracks.size} tracks, $parsed read, ${System.currentTimeMillis() - started} ms")
         } catch (e: Exception) {
             Log.e(TAG, "Scan failed", e)
@@ -193,7 +200,12 @@ class LibraryRepository(private val context: Context) {
         if (tracks === serverTracks) return
         serverTracks = tracks
         phoneTracks?.let(::publish)
-        _generation.value++
+        _generation.value = _generation.value + 1
+    }
+
+    @Synchronized
+    private fun publishCache(phone: List<Track>) {
+        if (phoneTracks == null) publish(phone)
     }
 
     @Synchronized

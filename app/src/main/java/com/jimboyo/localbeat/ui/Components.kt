@@ -278,7 +278,7 @@ fun AddToPlaylistDialog(playlists: List<Playlist>, count: Int, onDismiss: () -> 
                         Text("New playlist", Modifier.padding(start = 16.dp), style = MaterialTheme.typography.titleMedium)
                     }
                 }
-                items(playlists, key = { it.id }) { p ->
+                items(playlists, key = { "${if (it.onServer) "s" else "p"}:${it.id}" }) { p ->
                     Row(Modifier.fillMaxWidth().clickable { onPick(p) }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null)
                         Text(p.name, Modifier.padding(start = 16.dp), style = MaterialTheme.typography.bodyLarge)

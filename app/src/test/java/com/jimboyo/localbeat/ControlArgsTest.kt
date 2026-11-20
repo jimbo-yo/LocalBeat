@@ -23,9 +23,15 @@ class ControlArgsTest {
         assertEquals(3_723_000L, ControlArgs.millis("1:02:03"))
         assertEquals(1_500L, ControlArgs.millis("1500ms"))
         assertEquals(2_500L, ControlArgs.millis("2.5"))
-        for (bad in listOf("", "x", "1:2:3:4", "-5")) {
+        for (bad in listOf("", "x", "1:2:3:4", "-5", "-500ms", "Infinity", "NaN")) {
             try { ControlArgs.millis(bad); throw AssertionError("accepted $bad") } catch (e: IllegalArgumentException) { }
         }
+    }
+
+    @Test fun itemRecognition() {
+        assertEquals("artistall:r123", ControlArgs.item("artistall:r123").mediaId)
+        assertEquals("songs", ControlArgs.item("songs").mediaId)
+        assertEquals("playlist:p1", ControlArgs.item("playlist:p1").mediaId)
     }
 
     @Test fun switches() {

@@ -170,7 +170,7 @@ class Library(
     fun album(id: String): Album? = albumsById[id]
     fun artist(id: String): Artist? = artistsById[id]
     fun albumOf(track: Track): Album? = albumIdByTrack[track.id]?.let(albumsById::get)
-    fun albumOf(trackId: String): Album? = albumIdByTrack[trackId]?.let(albumsById::get)
+    fun albumOf(trackId: String): Album? = albumIdByTrack[standIns[trackId] ?: trackId]?.let(albumsById::get)
 
     /** Albums by when they arrived on the phone, newest first. */
     val recentlyAdded: List<Album> get() = albums.sortedByDescending { it.dateAdded }
@@ -290,13 +290,15 @@ class Library(
     }
 }
 
+private val FOLD_SPACES = Regex("\\s+")
+
 /**
  * Folds a name for grouping and matching: case, curly vs straight quotes, and
  * runs of whitespace don't distinguish two names.
  */
 fun fold(s: String): String = s.trim().lowercase(Locale.ROOT)
     .replace('’', '\'').replace('‘', '\'').replace('“', '"').replace('”', '"')
-    .replace(Regex("\\s+"), " ")
+    .replace(FOLD_SPACES, " ")
 
 object SortKey {
     /** Sort ignoring case, quotes and a leading "The ". */

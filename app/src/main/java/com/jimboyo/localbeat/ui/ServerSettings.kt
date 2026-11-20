@@ -31,9 +31,9 @@ fun ServerSection(ui: Ui) {
     val server = ui.app.server ?: return
     val settings by server.settings.collectAsStateWithLifecycle()
     val status by server.status.collectAsStateWithLifecycle()
-    var address by remember(settings) { mutableStateOf(settings.address) }
-    var username by remember(settings) { mutableStateOf(settings.username) }
-    var password by remember(settings) { mutableStateOf(settings.password) }
+    var address by remember(settings.address) { mutableStateOf(settings.address) }
+    var username by remember(settings.username) { mutableStateOf(settings.username) }
+    var password by remember(settings.password) { mutableStateOf(settings.password) }
 
     Section("Music server")
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {

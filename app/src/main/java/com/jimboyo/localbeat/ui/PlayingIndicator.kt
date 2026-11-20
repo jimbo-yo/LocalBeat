@@ -39,24 +39,26 @@ fun isCurrent(trackId: String?): Boolean = trackId != null && LocalPlayer.curren
 @Composable
 fun PlayingBars(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary, size: Dp = 20.dp) {
     val playing = LocalPlayer.current?.isPlaying == true
-    val transition = rememberInfiniteTransition(label = "bars")
-    // Each bar has its own period so they never line up.
-    val periods = intArrayOf(520, 410, 610, 470)
-    val heights: List<State<Float>> = periods.mapIndexed { i, ms ->
-        transition.animateFloat(
-            initialValue = 0.2f, targetValue = 1f,
-            animationSpec = bounce(ms), label = "bar$i",
-        )
-    }
     val still = floatArrayOf(0.45f, 0.75f, 0.35f, 0.6f)
+    val heights: List<State<Float>>? = if (playing) {
+        val transition = rememberInfiniteTransition(label = "bars")
+        // Each bar has its own period so they never line up.
+        val periods = intArrayOf(520, 410, 610, 470)
+        periods.mapIndexed { i, ms ->
+            transition.animateFloat(
+                initialValue = 0.2f, targetValue = 1f,
+                animationSpec = bounce(ms), label = "bar$i",
+            )
+        }
+    } else null
     // Prism: each bar a step along the gradient.
     val prism = LocalPrism.current && color == MaterialTheme.colorScheme.primary
     Canvas(modifier.size(size)) {
-        val n = heights.size
+        val n = still.size
         val gap = this.size.width / (n * 3f)
         val barW = (this.size.width - gap * (n - 1)) / n
         for (i in 0 until n) {
-            val h = this.size.height * (if (playing) heights[i].value else still[i])
+            val h = this.size.height * (heights?.get(i)?.value ?: still[i])
             drawRoundRect(
                 if (prism) prismAt(0.1f + 0.25f * i) else color, topLeft = Offset(i * (barW + gap), this.size.height - h), size = Size(barW, h),
                 cornerRadius = CornerRadius(barW / 2, barW / 2),
