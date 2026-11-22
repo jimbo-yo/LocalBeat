@@ -18,8 +18,8 @@ encodings.
 
 ## Phone
 
-- Pixel 9 (`tokay`), Android 17, adb serial 00000000000000; USB debugging on,
-  this computer authorised. If adb can't see it while plugged in:
+- Tested on Pixel 9 (`tokay`). Personal device serial / keystore paths live in
+  `CLAUDE.local.md` (gitignored). If adb can't see a plugged-in phone:
   `adb kill-server; adb start-server`
 - Music lives in `/sdcard/Music` ("Internal Storage/Music")
 
@@ -104,12 +104,11 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
 - Android Studio at `/opt/android-studio`; SDK `~/Android/Sdk` (platforms
   35-37, build-tools 34-36). AGP 9.5 / Gradle 9.8 / compileSdk 37 (Compose
   1.12 needs it), Media3 1.11, minSdk 33. Package `com.jimboyo.localbeat`
-- Windows (the Surface, 2026-11-17): Android Studio in `C:\Program
-  Files\Android\Android Studio`, SDK `%LOCALAPPDATA%\Android\Sdk`. No
-  gradlew.bat: run `./gradlew` from Git Bash with `JAVA_HOME="/c/Program
-  Files/Android/Android Studio/jbr"`. Release key copied from the Mac's
-  backup to `C:\Users\user\.config\localbeat\` (storeFile set to the
-  Windows path). First `dist` build ~11 min
+- Windows: Android Studio in `C:\Program Files\Android\Android Studio`, SDK
+  `%LOCALAPPDATA%\Android\Sdk`. No gradlew.bat: run `./gradlew` from Git Bash
+  with `JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"`. Release key
+  in `~/.config/localbeat/` (storeFile set to the local path). First `dist`
+  build ~11 min
 - Release key: `~/.config/localbeat/` (not in git; a copy on the Mac server,
   `~/backup/localbeat/`, since 2026-11-13). **Back it up**: updates
   need the same key; without it the build falls back to the debug key. Bump
