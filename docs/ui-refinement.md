@@ -99,6 +99,13 @@ Search**.
    mood, genre and decade chips.
 4. **Studio player behaviour:** queue panel on every LIBRARY page, queue
    actions, shuffle and repeat.
+   *Status 2026-11-23:* built. The Queue panel already showed on every
+   LIBRARY page. New: the phone's header ("N songs · m:ss left · shuffled"),
+   Save, Clear (keeps the song playing), drag to move, × or right-click to
+   remove; shuffle reshuffles what's after the song playing at once and puts
+   the order back when turned off; repeat cycles off → all → one. Player:
+   `Player::rearrange` (reorder/remove without stopping the song heard) and
+   `Repeat::{Off, All, One}`, with tests.
 
 Studio's CLAUDE.md gets a pointer to `LocalBeat/GLOSSARY.md` and this file
 ("change in step") in step 2.
