@@ -10,7 +10,10 @@ import com.jimboyo.localbeat.art.ArtStore
 import com.jimboyo.localbeat.library.Album
 import com.jimboyo.localbeat.library.AlbumGroup
 import com.jimboyo.localbeat.library.Artist
+import com.jimboyo.localbeat.library.BroadGenreGroup
 import com.jimboyo.localbeat.library.Library
+import com.jimboyo.localbeat.library.Search
+import com.jimboyo.localbeat.library.SortKey
 import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.library.fold
 import com.jimboyo.localbeat.playlists.Playlist
@@ -19,16 +22,24 @@ import com.jimboyo.localbeat.playlists.Playlist
  * The browse tree shared by Android Auto, other media browsers and LocalBeat's own UI.
  *
  * Media IDs:
- * - `root`; its children `albums`, `artists`, `playlists`, `more` (Auto shows these as tabs);
- *   `more` holds `genres`, `decades`, `songs`, `recent`
- * - `album:<id>`, `artist:<id>`, `playlist:<id>`, `genre:<id>`, `decade:<id>`: lists
- * - `artistall:<id>`: every song by an artist
+ * - `root`; the shared entry points as Android Auto's 4 tabs (docs/ui-refinement.md):
+ *   `explore`, `library`, `playlists`, `moods` (search has Auto's own button)
+ *   - `explore`: Shuffle all, Random album, Recently added (+ See all), Genres, Decades
+ *   - `library`: `albums`, `artists`, `songs`
+ *     (artists & albums automatically use A–Z letter buckets when > [AZ_THRESHOLD] items)
+ *   - `playlists`, `moods`: one folder each
+ *   - `genres`, `decades`, `recent`: the full lists
+ * - `album:<id>`, `artist:<id>`, `playlist:<id>`, `genre:<id>`, `mood:<id>`, `decade:<id>`;
+ *   every one but an album starts with a "Shuffle <name>" item
+ * - `shuffleall`, `randomalbum`, `shuffleartist:<id>`, `shuffleplaylist:<id>`,
+ *   `shufflemood:<id>`, `shufflegenre:<id>`, `shuffledecade:<id>`
+ * - `artistall:<id>`: all an artist's songs in order (the list loose songs play from)
+ * - `browse`, `more`: old IDs, kept as aliases of `explore` and `library`
  * - `t:<id>`: one track (what the player's queue holds)
  * - `<list>/<position>|t:<id>`: a track tapped in a list; plays the list from there.
- *   The position tells repeats in a playlist apart.
  */
 class BrowseTree(
-    private val art: ArtStore,
+    private val art: ArtStore?,
     private val playlists: () -> List<Playlist>,
     /** Where a music-server song streams from (Connected edition). */
     private val serverUri: (Track) -> android.net.Uri? = { null },
@@ -56,50 +67,152 @@ class BrowseTree(
         val (kind, id) = split(parentId)
         return when (kind) {
             ROOT -> listOf(
-                folder(ALBUMS, "Albums", MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS, grid = true),
-                folder(ARTISTS, "Artists", MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
+                folder(EXPLORE, "Explore", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED, grid = true),
+                folder(LIBRARY, "Library", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
                 folder(PLAYLISTS, "Playlists", MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS),
-                folder(MORE, "Browse", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+                folder(MOODS, "Moods", MediaMetadata.MEDIA_TYPE_FOLDER_GENRES),
             )
-            MORE -> listOf(
-                folder(GENRES, "Genres", MediaMetadata.MEDIA_TYPE_FOLDER_GENRES),
-                folder(DECADES, "Decades", MediaMetadata.MEDIA_TYPE_FOLDER_YEARS),
-                folder(SONGS, "Songs", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-                folder(RECENT, "Recently added", MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS, grid = true),
+            EXPLORE, BROWSE -> exploreChildren(lib)
+            LIBRARY, MORE -> listOf(
+                folder(ALBUMS, "Albums", MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS, subtitle = plural(lib.albums.size, "album"), grid = lib.albums.size <= AZ_THRESHOLD),
+                folder(ARTISTS, "Artists", MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS, subtitle = plural(lib.artists.size, "artist")),
+                folder(SONGS, "Songs", MediaMetadata.MEDIA_TYPE_FOLDER_MIXED, subtitle = plural(lib.tracks.size, "song")),
             )
-            ALBUMS -> lib.albums.map { albumItem(it) }
-            RECENT -> lib.recentlyAdded.take(RECENT_LIMIT).map { albumItem(it) }
-            ARTISTS -> lib.artists.map { artistItem(it) }
-            SONGS -> listItems(SONGS, lib.tracks, lib)
-            GENRES -> lib.genres.map { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+            MOODS -> lib.moods
+                .sortedWith(compareByDescending<AlbumGroup> { it.albums.size }.thenBy { SortKey.of(it.name) })
+                .map { groupItem(MOOD, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+            GENRES -> sortedBroadGenres(lib).map { broadGenreItem(it) }
             DECADES -> lib.decades.map { groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS) }
             PLAYLISTS -> playlists().map { playlistItem(it, lib) }
-            GENRE -> lib.genre(id)?.albums?.map { albumItem(it) }
-            DECADE -> lib.decade(id)?.albums?.map { albumItem(it) }
-            PLAYLIST -> findPlaylist(id)?.let { listItems(parentId, it.tracks(lib), lib) }
+            RECENT -> lib.recentlyAdded.take(RECENT_LIMIT).map { albumItem(it) }
+            SONGS -> listItems(SONGS, lib.tracks, lib)
+            ARTISTS -> if (lib.artists.size > AZ_THRESHOLD) artistBuckets(lib.artists) else lib.artists.map { artistItem(it) }
+            ARTISTS_LETTER -> lib.artists.filter { Search.indexLetter(it.name).toString() == id }.map { artistItem(it) }
+            ALBUMS -> if (lib.albums.size > AZ_THRESHOLD) albumBuckets(ALBUMS_LETTER, lib.albums) else lib.albums.map { albumItem(it) }
+            ALBUMS_LETTER -> lib.albums.filter { Search.indexLetter(it.title).toString() == id }.map { albumItem(it) }
+            MOOD -> lib.mood(id)?.let { m ->
+                listOf(shuffleItem(SHUFFLE_MOOD + m.id, m.name, m.albums.sumOf { it.tracks.size })) + m.albums.map { albumItem(it) }
+            }
+            GENRE -> genreChildren(id, lib)
+            GENRE_ALBUMS -> lib.broadGenre(id)?.albums?.let { albums ->
+                if (albums.size > AZ_THRESHOLD) albumBuckets(GENRE_ALBUMS_LETTER + "${id}_", albums)
+                else albums.map { albumItem(it) }
+            }
+            GENRE_ALBUMS_LETTER -> {
+                val genreId = id.substringBefore('_')
+                val letter = id.substringAfter('_', "")
+                lib.broadGenre(genreId)?.albums
+                    ?.filter { Search.indexLetter(it.title).toString() == letter }
+                    ?.map { albumItem(it) }
+            }
+            DECADE -> lib.decade(id)?.let { d ->
+                listOf(shuffleItem(SHUFFLE_DECADE + d.id, d.name, d.albums.sumOf { it.tracks.size })) + d.albums.map { albumItem(it) }
+            }
+            PLAYLIST -> findPlaylist(id)?.let { p ->
+                val tracks = p.tracks(lib)
+                listOfNotNull(shuffleItem(SHUFFLE_PLAYLIST + id, p.name, tracks.size).takeIf { tracks.isNotEmpty() }) +
+                    listItems(parentId, tracks, lib)
+            }
             ALBUM -> lib.album(id)?.let { album ->
                 listItems(parentId, album.tracks, lib) { t -> if (album.discCount > 1) "Disc ${t.discNumber}" else null }
             }
             ARTIST -> lib.artist(id)?.let { artist ->
-                listOf(playAllItem(artist)) + artist.albums.map { albumItem(it) } +
+                listOf(shuffleItem(SHUFFLE_ARTIST + id, artist.name, artist.tracks.size)) + artist.albums.map { albumItem(it) } +
                     artist.looseTracks.map { t -> trackItem(t, lib, "$ARTIST_ALL$id|$TRACK${t.id}") }
             }
             else -> null
         }
     }
 
+    /** Explore, in the phone's order: Shuffle all, Random album, Recently added, Genres, Decades. */
+    private fun exploreChildren(lib: Library): List<MediaItem> = buildList {
+        if (lib.tracks.isNotEmpty()) {
+            add(playableAction(SHUFFLE_ALL, "Shuffle all", plural(lib.tracks.size, "song")))
+        }
+        if (lib.albums.isNotEmpty()) {
+            add(playableAction(RANDOM_ALBUM, "Random album", "Pick a surprise album"))
+        }
+        lib.recentlyAdded.take(EXPLORE_RECENT_LIMIT).forEach { add(albumItem(it, group = "Recently added")) }
+        if (lib.albums.size > EXPLORE_RECENT_LIMIT) {
+            add(folder(RECENT, "See all", MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS, grid = true, group = "Recently added"))
+        }
+        sortedBroadGenres(lib).forEach { add(broadGenreItem(it, group = "Genres")) }
+        lib.decades.forEach { add(groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS, group = "Decades")) }
+    }
+
+    private fun sortedBroadGenres(lib: Library) =
+        lib.broadGenres.sortedWith(compareByDescending<BroadGenreGroup> { it.albums.size }.thenBy { SortKey.of(it.name) })
+
+    private fun genreChildren(id: String, lib: Library): List<MediaItem>? {
+        val broad = lib.broadGenre(id)
+        if (broad != null && broad.subgenres.isNotEmpty()) {
+            return buildList {
+                add(shuffleItem(SHUFFLE_GENRE + broad.id, broad.name, broad.albums.sumOf { it.tracks.size }))
+                broad.subgenres.forEach { sub ->
+                    add(groupItem(GENRE, sub, MediaMetadata.MEDIA_TYPE_GENRE, group = "Subgenres"))
+                }
+                if (broad.albums.size <= 12) {
+                    broad.albums.forEach { add(albumItem(it, group = "Albums")) }
+                } else {
+                    add(
+                        folder(
+                            GENRE_ALBUMS + broad.id, "All ${broad.name} albums", MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS,
+                            subtitle = plural(broad.albums.size, "album"), grid = broad.albums.size <= AZ_THRESHOLD, group = "Albums",
+                        )
+                    )
+                }
+            }
+        }
+        val group = broad?.asGroup() ?: lib.genre(id) ?: return null
+        return listOf(shuffleItem(SHUFFLE_GENRE + group.id, group.name, group.albums.sumOf { it.tracks.size })) +
+            group.albums.map { albumItem(it) }
+    }
+
+    private fun artistBuckets(artists: List<Artist>): List<MediaItem> =
+        artists.groupBy { Search.indexLetter(it.name) }
+            .entries
+            .sortedBy { if (it.key == '#') Char.MAX_VALUE else it.key }
+            .map { (letter, list) ->
+                browsable(
+                    ARTISTS_LETTER + letter, letter.toString(), plural(list.size, "artist"),
+                    MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS,
+                    list.firstNotNullOfOrNull { a -> a.albums.firstNotNullOfOrNull(::artUri) },
+                )
+            }
+
+    private fun albumBuckets(prefix: String, albums: List<Album>): List<MediaItem> =
+        albums.groupBy { Search.indexLetter(it.title) }
+            .entries
+            .sortedBy { if (it.key == '#') Char.MAX_VALUE else it.key }
+            .map { (letter, list) ->
+                browsable(
+                    prefix + letter, letter.toString(), plural(list.size, "album"),
+                    MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS,
+                    list.firstNotNullOfOrNull(::artUri),
+                    grid = true,
+                )
+            }
+
     fun item(mediaId: String, lib: Library): MediaItem? {
         val (kind, id) = split(mediaId)
         return when (kind) {
             ROOT -> root()
+            SHUFFLE_ALL -> playableAction(SHUFFLE_ALL, "Shuffle all", plural(lib.tracks.size, "song"))
+            RANDOM_ALBUM -> playableAction(RANDOM_ALBUM, "Random album", "Pick a surprise album")
             ALBUM -> lib.album(id)?.let { albumItem(it) }
             ARTIST -> lib.artist(id)?.let { artistItem(it) }
-            ARTIST_ALL -> lib.artist(id)?.let { playAllItem(it) }
-            GENRE -> lib.genre(id)?.let { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+            ARTIST_ALL -> lib.artist(id)?.let { playableAction(ARTIST_ALL + it.id, it.name, plural(it.tracks.size, "song")) }
+            SHUFFLE_ARTIST -> lib.artist(id)?.let { shuffleItem(SHUFFLE_ARTIST + it.id, it.name, it.tracks.size) }
+            MOOD -> lib.mood(id)?.let { groupItem(MOOD, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+            SHUFFLE_MOOD -> lib.mood(id)?.let { shuffleItem(SHUFFLE_MOOD + it.id, it.name, it.albums.sumOf { a -> a.tracks.size }) }
+            GENRE -> lib.broadGenre(id)?.let { broadGenreItem(it) } ?: lib.genre(id)?.let { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+            SHUFFLE_GENRE -> (lib.broadGenre(id)?.asGroup() ?: lib.genre(id))?.let { shuffleItem(SHUFFLE_GENRE + it.id, it.name, it.albums.sumOf { a -> a.tracks.size }) }
             DECADE -> lib.decade(id)?.let { groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS) }
+            SHUFFLE_DECADE -> lib.decade(id)?.let { shuffleItem(SHUFFLE_DECADE + it.id, it.name, it.albums.sumOf { a -> a.tracks.size }) }
             PLAYLIST -> findPlaylist(id)?.let { playlistItem(it, lib) }
+            SHUFFLE_PLAYLIST -> findPlaylist(id)?.let { p -> shuffleItem(SHUFFLE_PLAYLIST + id, p.name, p.tracks(lib).size) }
             else -> trackIdOf(mediaId)?.let(lib::track)?.let { trackItem(it, lib) }
-                ?: (children(ROOT, lib)!! + children(MORE, lib)!!).firstOrNull { it.mediaId == mediaId }
+                ?: (children(ROOT, lib)!! + children(LIBRARY, lib)!!).firstOrNull { it.mediaId == mediaId }
         }
     }
 
@@ -107,7 +220,10 @@ class BrowseTree(
     fun search(query: String, lib: Library): List<MediaItem> {
         val q = searchKey(query)
         if (q.isEmpty()) return emptyList()
-        return ranked(lib.artists, q) { it.name }.take(SEARCH_LIMIT).map { artistItem(it) } +
+        return ranked(lib.moods, q) { it.name }.take(SEARCH_LIMIT).map { groupItem(MOOD, it, MediaMetadata.MEDIA_TYPE_GENRE) } +
+            ranked(lib.genres, q) { it.name }.take(SEARCH_LIMIT).map { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) } +
+            ranked(lib.decades, q) { it.name }.take(SEARCH_LIMIT).map { groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS) } +
+            ranked(lib.artists, q) { it.name }.take(SEARCH_LIMIT).map { artistItem(it) } +
             ranked(lib.albums, q) { it.title }.take(SEARCH_LIMIT).map { albumItem(it) } +
             ranked(playlists(), q) { it.name }.take(SEARCH_LIMIT).map { playlistItem(it, lib) } +
             ranked(lib.tracks, q) { it.title }.take(SEARCH_LIMIT).map { t -> trackItem(t, lib, inAlbumId(t, lib)) }
@@ -119,8 +235,8 @@ class BrowseTree(
 
     /**
      * What to play for a requested item: a track in a list plays the list from that
-     * track; an album, artist, playlist, genre or decade plays all its songs; a voice
-     * request ("play Nightrain on LocalBeat") is searched.
+     * track; an album, artist, playlist, genre, mood or decade plays all its songs;
+     * a voice request ("play driving music on LocalBeat") is searched.
      */
     fun resolve(item: MediaItem, lib: Library): Queue {
         val mediaId = item.mediaId
@@ -146,10 +262,18 @@ class BrowseTree(
             TRACK -> listOfNotNull(lib.track(id))
             ALBUM -> lib.album(id)?.tracks
             ARTIST, ARTIST_ALL -> lib.artist(id)?.tracks
-            GENRE -> lib.genre(id)?.albums?.flatMap { it.tracks }
+            SHUFFLE_ARTIST -> lib.artist(id)?.tracks?.shuffled()
+            GENRE -> (lib.broadGenre(id)?.albums ?: lib.genre(id)?.albums)?.flatMap { it.tracks }
+            SHUFFLE_GENRE -> (lib.broadGenre(id)?.albums ?: lib.genre(id)?.albums)?.flatMap { it.tracks }?.shuffled()
+            MOOD -> lib.mood(id)?.albums?.flatMap { it.tracks }
+            SHUFFLE_MOOD -> lib.mood(id)?.albums?.flatMap { it.tracks }?.shuffled()
             DECADE -> lib.decade(id)?.albums?.flatMap { it.tracks }
+            SHUFFLE_DECADE -> lib.decade(id)?.albums?.flatMap { it.tracks }?.shuffled()
             PLAYLIST -> findPlaylist(id)?.tracks(lib)
+            SHUFFLE_PLAYLIST -> findPlaylist(id)?.tracks(lib)?.shuffled()
             SONGS -> lib.tracks
+            SHUFFLE_ALL -> lib.tracks.shuffled()
+            RANDOM_ALBUM -> lib.albums.randomOrNull()?.tracks.orEmpty()
             else -> null
         }
     }
@@ -163,6 +287,7 @@ class BrowseTree(
         val genreName = extras?.getString(MediaStore.EXTRA_MEDIA_GENRE)?.let(::searchKey).orEmpty()
         val focus = extras?.getString(MediaStore.EXTRA_MEDIA_FOCUS)
         val q = searchKey(query)
+        val tagQ = stripVoiceFiller(q)
 
         fun ofTrack(t: Track): Queue {
             val album = lib.albumOf(t) ?: return Queue(listOf(t), 0)
@@ -187,7 +312,8 @@ class BrowseTree(
             ranked(lib.artists, artist) { it.name }.firstOrNull()?.let { return Queue(it.tracks, 0) }
         }
         if (genreName.isNotEmpty()) {
-            ranked(lib.genres, genreName) { it.name }.firstOrNull()?.let { g -> return Queue(g.albums.flatMap { it.tracks }.shuffled(), 0) }
+            val gq = stripVoiceFiller(genreName)
+            matchMoodGenreOrDecade(gq, lib)?.let { return Queue(it.shuffled(), 0) }
         }
         if (q.isEmpty()) return Queue(emptyList(), 0)
         // Honour EXTRA_MEDIA_FOCUS if the assistant told us what kind of thing was requested.
@@ -199,19 +325,55 @@ class BrowseTree(
             MediaStore.Audio.Albums.ENTRY_CONTENT_TYPE ->
                 ranked(lib.albums, q) { it.title }.firstOrNull()?.let { return Queue(it.tracks, 0) }
             MediaStore.Audio.Genres.ENTRY_CONTENT_TYPE ->
-                ranked(lib.genres, q) { it.name }.firstOrNull()?.let { g -> return Queue(g.albums.flatMap { it.tracks }.shuffled(), 0) }
+                matchMoodGenreOrDecade(tagQ, lib)?.let { return Queue(it.shuffled(), 0) }
             MediaStore.Audio.Media.ENTRY_CONTENT_TYPE ->
                 ranked(lib.tracks, q) { it.title }.firstOrNull()?.let { return ofTrack(it) }
         }
-        // Free text: the best match wins; on a tie playlists, then artists, albums, songs.
+        // Free text: the best match wins across playlists, moods, genres, decades, artists, albums, songs.
+        val moodHit = ranked(lib.moods, tagQ) { it.name }.firstOrNull()
+        val genreHit = ranked(lib.genres, tagQ) { it.name }.firstOrNull()
+        val decadeHit = matchDecade(tagQ, lib)
         val best = listOfNotNull(
             ranked(playlists(), q) { it.name }.firstOrNull()?.let { score(it.name, q) + 0.1 to Queue(it.tracks(lib), 0) },
+            moodHit?.let { score(it.name, tagQ) + 0.05 to Queue(it.albums.flatMap { a -> a.tracks }.shuffled(), 0) },
+            genreHit?.let { score(it.name, tagQ) + 0.04 to Queue((lib.broadGenre(it.id)?.albums ?: it.albums).flatMap { a -> a.tracks }.shuffled(), 0) },
+            decadeHit?.let { 3.03 to Queue(it.albums.flatMap { a -> a.tracks }.shuffled(), 0) },
             ranked(lib.artists, q) { it.name }.firstOrNull()?.let { score(it.name, q) to Queue(it.tracks, 0) },
             ranked(lib.albums, q) { it.title }.firstOrNull()?.let { score(it.title, q) - 0.1 to Queue(it.tracks, 0) },
             ranked(lib.tracks, q) { it.title }.firstOrNull()?.let { score(it.title, q) - 0.2 to ofTrack(it) },
         ).maxByOrNull { it.first }
         return best?.second ?: Queue(emptyList(), 0)
     }
+
+    private fun matchMoodGenreOrDecade(q: String, lib: Library): List<Track>? {
+        if (q.isEmpty()) return null
+        ranked(lib.moods, q) { it.name }.firstOrNull()?.let { m -> return m.albums.flatMap { it.tracks } }
+        ranked(lib.genres, q) { it.name }.firstOrNull()?.let { g ->
+            return (lib.broadGenre(g.id)?.albums ?: g.albums).flatMap { it.tracks }
+        }
+        matchDecade(q, lib)?.let { d -> return d.albums.flatMap { it.tracks } }
+        return null
+    }
+
+    private fun matchDecade(q: String, lib: Library): AlbumGroup? {
+        if (q.isEmpty()) return null
+        val decadeNum = when (q) {
+            "50s", "1950s", "fifties" -> 1950
+            "60s", "1960s", "sixties" -> 1960
+            "70s", "1970s", "seventies" -> 1970
+            "80s", "1980s", "eighties" -> 1980
+            "90s", "1990s", "nineties" -> 1990
+            "00s", "2000s", "two thousands" -> 2000
+            "10s", "2010s", "twenty tens" -> 2010
+            "20s", "2020s", "twenty twenties" -> 2020
+            else -> null
+        } ?: return null
+        return lib.decade("d$decadeNum")
+    }
+
+    /** "driving music" -> "driving", "80s songs" -> "80s", "chill vibes" -> "chill". */
+    private fun stripVoiceFiller(q: String): String =
+        q.removeSuffix(" music").removeSuffix(" songs").removeSuffix(" vibes").removeSuffix(" tracks").trim()
 
     // ---- items ----
 
@@ -256,9 +418,9 @@ class BrowseTree(
             .build()
     }
 
-    private fun albumItem(album: Album): MediaItem = browsable(
+    private fun albumItem(album: Album, group: String? = null): MediaItem = browsable(
         ALBUM + album.id, album.title, if (album.year > 0) "${album.artist} · ${album.year}" else album.artist,
-        MediaMetadata.MEDIA_TYPE_ALBUM, artUri(album),
+        MediaMetadata.MEDIA_TYPE_ALBUM, artUri(album), group = group,
     ) { setArtist(album.artist).setAlbumTitle(album.title).setRecordingYear(album.year.takeIf { it > 0 }) }
 
     private fun artistItem(artist: Artist): MediaItem = browsable(
@@ -266,33 +428,48 @@ class BrowseTree(
         MediaMetadata.MEDIA_TYPE_ARTIST, artist.albums.firstNotNullOfOrNull(::artUri), grid = true,
     ) { setArtist(artist.name) }
 
-    private fun groupItem(kind: String, g: AlbumGroup, type: Int): MediaItem = browsable(
-        kind + g.id, g.name, plural(g.albums.size, "album"), type, g.albums.firstNotNullOfOrNull(::artUri), grid = true,
+    private fun groupItem(kind: String, g: AlbumGroup, type: Int, group: String? = null): MediaItem = browsable(
+        kind + g.id, g.name, plural(g.albums.size, "album"), type, g.albums.firstNotNullOfOrNull(::artUri), grid = true, group = group,
     )
 
-    private fun playlistItem(p: Playlist, lib: Library): MediaItem {
-        val tracks = p.tracks(lib)
+    private fun broadGenreItem(bg: BroadGenreGroup, group: String? = null): MediaItem {
+        val sub = if (bg.subgenres.isEmpty()) plural(bg.albums.size, "album")
+        else "${plural(bg.albums.size, "album")} · ${plural(bg.subgenres.size, "subgenre")}"
         return browsable(
-            PLAYLIST + p.id, p.name, plural(tracks.size, "song"), MediaMetadata.MEDIA_TYPE_PLAYLIST,
-            tracks.firstNotNullOfOrNull { t -> lib.albumOf(t)?.let(::artUri) },
+            GENRE + bg.id, bg.name, sub, MediaMetadata.MEDIA_TYPE_GENRE,
+            bg.albums.firstNotNullOfOrNull(::artUri), grid = bg.subgenres.isEmpty(), group = group,
         )
     }
 
-    private fun playAllItem(artist: Artist): MediaItem = MediaItem.Builder()
-        .setMediaId(ARTIST_ALL + artist.id)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle("All songs")
-                .setSubtitle(plural(artist.tracks.size, "song"))
-                .setArtist(artist.name)
-                .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)
-                .setIsBrowsable(false)
-                .setIsPlayable(true)
-                .build()
-        ).build()
+    private fun playlistItem(p: Playlist, lib: Library, group: String? = null): MediaItem {
+        val tracks = p.tracks(lib)
+        return browsable(
+            PLAYLIST + p.id, p.name, plural(tracks.size, "song"), MediaMetadata.MEDIA_TYPE_PLAYLIST,
+            tracks.firstNotNullOfOrNull { t -> lib.albumOf(t)?.let(::artUri) }, group = group,
+        )
+    }
+
+    /** The first item of every group but an album: "Shuffle <name>". */
+    private fun shuffleItem(mediaId: String, name: String, songs: Int): MediaItem =
+        playableAction(mediaId, "Shuffle $name", plural(songs, "song"))
+
+    private fun playableAction(id: String, title: String, subtitle: String, group: String? = null): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setSubtitle(subtitle)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .apply { if (group != null) setExtras(Bundle().apply { putString(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_GROUP_TITLE, group) }) }
+                    .build()
+            ).build()
 
     private fun browsable(
-        id: String, title: String, subtitle: String, type: Int, artwork: android.net.Uri?, grid: Boolean = false,
+        id: String, title: String, subtitle: String, type: Int, artwork: android.net.Uri?,
+        grid: Boolean = false, group: String? = null,
         more: MediaMetadata.Builder.() -> MediaMetadata.Builder = { this },
     ) = MediaItem.Builder()
         .setMediaId(id)
@@ -304,37 +481,51 @@ class BrowseTree(
                 .setMediaType(type)
                 .setIsBrowsable(true)
                 .setIsPlayable(false)
-                .apply { if (grid) setExtras(gridChildren()) }
+                .apply { itemExtras(grid, group)?.let(::setExtras) }
                 .more()
                 .build()
         ).build()
 
-    private fun folder(id: String, title: String, type: Int, grid: Boolean = false) = MediaItem.Builder()
+    private fun folder(
+        id: String, title: String, type: Int, subtitle: String? = null,
+        grid: Boolean = false, group: String? = null,
+    ) = MediaItem.Builder()
         .setMediaId(id)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)
+                .setSubtitle(subtitle)
                 .setMediaType(type)
                 .setIsBrowsable(true)
                 .setIsPlayable(false)
-                .apply { if (grid) setExtras(gridChildren()) }
+                .apply { itemExtras(grid, group)?.let(::setExtras) }
                 .build()
         ).build()
 
     /** Old rips have no embedded cover; give those no artwork URI rather than a broken one. */
-    private fun artUri(album: Album) = if (album.tracks.any { it.hasEmbeddedArt }) art.uriFor(album.id) else null
+    private fun artUri(album: Album) = if (album.tracks.any { it.hasEmbeddedArt }) art?.uriFor(album.id) else null
 
-    private fun gridChildren() = Bundle().apply {
-        putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE, MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+    private fun itemExtras(grid: Boolean, group: String?): Bundle? {
+        if (!grid && group == null) return null
+        return Bundle().apply {
+            if (grid) putInt(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_BROWSABLE, MediaConstants.EXTRAS_VALUE_CONTENT_STYLE_GRID_ITEM)
+            if (group != null) putString(MediaConstants.EXTRAS_KEY_CONTENT_STYLE_GROUP_TITLE, group)
+        }
     }
 
     companion object {
         const val ROOT = "root"
-        const val ALBUMS = "albums"
-        const val ARTISTS = "artists"
-        const val PLAYLISTS = "playlists"
-        const val MORE = "more"
+        const val EXPLORE = "explore"
+        const val BROWSE = "browse"
+        const val MOODS = "moods"
         const val GENRES = "genres"
+        const val LIBRARY = "library"
+        const val MORE = "more"
+        const val ALBUMS = "albums"
+        const val ALBUMS_LETTER = "albumsletter:"
+        const val ARTISTS = "artists"
+        const val ARTISTS_LETTER = "artistsletter:"
+        const val PLAYLISTS = "playlists"
         const val DECADES = "decades"
         const val SONGS = "songs"
         const val RECENT = "recent"
@@ -343,13 +534,25 @@ class BrowseTree(
         const val ARTIST_ALL = "artistall:"
         const val PLAYLIST = "playlist:"
         const val GENRE = "genre:"
+        const val GENRE_ALBUMS = "genrealbums:"
+        const val GENRE_ALBUMS_LETTER = "genrealbumsletter:"
+        const val MOOD = "mood:"
         const val DECADE = "decade:"
+        const val SHUFFLE_ALL = "shuffleall"
+        const val RANDOM_ALBUM = "randomalbum"
+        const val SHUFFLE_GENRE = "shufflegenre:"
+        const val SHUFFLE_ARTIST = "shuffleartist:"
+        const val SHUFFLE_PLAYLIST = "shuffleplaylist:"
+        const val SHUFFLE_MOOD = "shufflemood:"
+        const val SHUFFLE_DECADE = "shuffledecade:"
         const val TRACK = "t:"
 
         private const val SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
         const val EXTRA_MEDIA_PLAYLIST = "android.intent.extra.playlist"
         private const val RECENT_LIMIT = 100
+        private const val EXPLORE_RECENT_LIMIT = 8
         private const val SEARCH_LIMIT = 50
+        const val AZ_THRESHOLD = 40
 
         /** "album:abc" -> ("album:", "abc"); "albums" -> ("albums", ""). Ignores any "/position". */
         private fun split(mediaId: String): Pair<String, String> {

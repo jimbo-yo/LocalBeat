@@ -150,6 +150,17 @@ class OggTagsTest {
         out.write(h.array()); out.write(body)
     }
 
+    @Test
+    fun cdRipTagFromStudiosSync() {
+        fun tags(vararg kv: Pair<String, String>) = com.jimboyo.localbeat.library.TrackTags.from(
+            com.jimboyo.localbeat.tags.VorbisComments("test", kv.groupBy({ it.first }, { it.second })),
+        )
+        assertEquals(true, tags("LOCALBEAT_SOURCE" to "CD").cdRip)
+        assertEquals(true, tags("LOCALBEAT_SOURCE" to "cd").cdRip)
+        assertEquals(false, tags("LOCALBEAT_SOURCE" to "copy").cdRip)
+        assertEquals(false, tags("TITLE" to "x").cdRip)
+    }
+
     private fun le(out: ByteArrayOutputStream, v: Int) {
         out.write(v and 0xff); out.write((v shr 8) and 0xff); out.write((v shr 16) and 0xff); out.write((v shr 24) and 0xff)
     }

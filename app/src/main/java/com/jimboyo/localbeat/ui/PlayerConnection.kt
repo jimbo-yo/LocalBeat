@@ -109,6 +109,32 @@ class PlayerConnection(private val context: Context) {
         c.play()
     }
 
+    /** Plays an explicit list of tracks (e.g. a cross-filtered genre + decade selection). */
+    fun playTracks(tracks: List<com.jimboyo.localbeat.library.Track>, shuffled: Boolean = false) {
+        val c = controller ?: return
+        if (tracks.isEmpty()) return
+        c.shuffleModeEnabled = shuffled
+        c.setMediaItems(tracks.map { item(BrowseTree.TRACK + it.id) }, 0, 0L)
+        c.prepare()
+        c.play()
+    }
+
+    /** Queues an explicit list of tracks right after the current song. */
+    fun playNextTracks(tracks: List<com.jimboyo.localbeat.library.Track>) {
+        val c = controller ?: return
+        if (tracks.isEmpty()) return
+        if (c.mediaItemCount == 0) return playTracks(tracks)
+        c.addMediaItems(c.currentMediaItemIndex + 1, tracks.map { item(BrowseTree.TRACK + it.id) })
+    }
+
+    /** Queues an explicit list of tracks at the end of the queue. */
+    fun addTracksToQueue(tracks: List<com.jimboyo.localbeat.library.Track>) {
+        val c = controller ?: return
+        if (tracks.isEmpty()) return
+        if (c.mediaItemCount == 0) return playTracks(tracks)
+        c.addMediaItems(tracks.map { item(BrowseTree.TRACK + it.id) })
+    }
+
     /** Queues a song, album, playlist… right after the current song. */
     fun playNext(mediaId: String) {
         val c = controller ?: return

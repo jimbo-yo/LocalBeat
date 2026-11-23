@@ -8,7 +8,7 @@ import java.io.File
 
 /** The parsed library, saved between launches so startup doesn't re-read every file. */
 object LibraryCache {
-    private const val VERSION = 3 // 2: year prefers ORIGINALDATE; multi-value GENRE. 3: server songs
+    private const val VERSION = 5 // 2: year prefers ORIGINALDATE; multi-value GENRE. 3: server songs. 4: mood tag. 5: CD rip
     private const val MAX_TRACKS = 500_000
     private const val MAX_STRING_BYTES = 1024 * 1024
 
@@ -26,7 +26,8 @@ object LibraryCache {
                     albumArtist = input.str(fileSize), album = input.str(fileSize), trackNumber = input.readInt(),
                     discNumber = input.readInt(), discTotal = input.readInt(), year = input.readInt(),
                     genre = input.str(fileSize), musicBrainzAlbumId = input.str(fileSize), hasEmbeddedArt = input.readBoolean(),
-                    serverSongId = input.str(fileSize), serverCoverArt = input.str(fileSize),
+                    serverSongId = input.str(fileSize), serverCoverArt = input.str(fileSize), mood = input.str(fileSize),
+                    cdRip = input.readBoolean(),
                 )
             }
         }
@@ -46,7 +47,8 @@ object LibraryCache {
                     out.str(t.albumArtist); out.str(t.album); out.writeInt(t.trackNumber)
                     out.writeInt(t.discNumber); out.writeInt(t.discTotal); out.writeInt(t.year)
                     out.str(t.genre); out.str(t.musicBrainzAlbumId); out.writeBoolean(t.hasEmbeddedArt)
-                    out.str(t.serverSongId); out.str(t.serverCoverArt)
+                    out.str(t.serverSongId); out.str(t.serverCoverArt); out.str(t.mood)
+                    out.writeBoolean(t.cdRip)
                 }
             }
             if (!tmp.renameTo(file)) tmp.delete()

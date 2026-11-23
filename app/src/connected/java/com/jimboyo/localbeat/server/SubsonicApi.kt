@@ -244,6 +244,12 @@ internal class SubsonicApi(
                 val genres = s.optJSONArray("genres")?.let { a -> (0 until a.length()).map { a.getJSONObject(it).optString("name") } }
                     ?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }
                     ?: listOfNotNull(s.optString("genre").takeIf { it.isNotBlank() })
+                val moods = s.optJSONArray("moods")?.let { a ->
+                    (0 until a.length()).mapNotNull { i ->
+                        a.optJSONObject(i)?.optString("name")?.takeIf { it.isNotBlank() }
+                            ?: a.optString(i).takeIf { it.isNotBlank() }
+                    }
+                }.orEmpty()
                 Track(
                     id = trackId(serverKey, id),
                     mediaStoreId = -1,
@@ -267,6 +273,10 @@ internal class SubsonicApi(
                     hasEmbeddedArt = s.optString("coverArt").isNotEmpty(),
                     serverSongId = id,
                     serverCoverArt = s.optString("coverArt"),
+                    mood = moods.joinToString("; "),
+                    // The server's FLAC library is the verified CD rips (LocalBeatServer serves
+                    // an album from its FLAC rip when it also has an older lossy copy).
+                    cdRip = s.optString("suffix").equals("flac", ignoreCase = true),
                 )
             }
         }

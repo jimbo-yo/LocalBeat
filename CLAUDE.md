@@ -23,14 +23,14 @@ encodings.
   `adb kill-server; adb start-server`
 - Music lives in `/sdcard/Music` ("Internal Storage/Music")
 
-## The library (contract with CDRipPipeline)
+## The library (contract with LocalBeat Studio)
 
 Put on the phone by **LocalBeat Studio's phone sync** (`localbeat sync` / the Phone
 tab; it replaced phone-sync.py on 2026-11-08). It makes Opus at sync time
 from two libraries: `~/Music/FLAC` (verified CD rips) and
 `~/Music/Miscellaneous` (older MP3/AAC/fre:ac copies, re-tagged from
 MusicBrainz by `localbeat enrich`). A CD rip replaces the old copy.
-(LocalBeat Studio is the desktop app in CDRipPipeline, called "ripshelf"
+(LocalBeat Studio is the desktop app in `~/Development/LocalBeatStudio`, formerly the CDRipPipeline repo, called "ripshelf"
 until 2026-11-11; the suite is LocalBeat = this phone app, LocalBeatServer
 and LocalBeat Studio.)
 
@@ -40,7 +40,11 @@ and LocalBeat Studio.)
   `{"albums": {"Artist/Album": {"source": "flac:Artist/Album" | "misc:...",
   "files": {...}}}}`. `flac:` = ripped from CD (verified), `misc:` = older
   copy. Albums missing from it (loose files, put on by hand) are unknown.
-  Use this to badge/filter albums; don't guess from tags
+  The app can't read it (scoped storage: not a media file, written over adb).
+  **CD rip** on the phone instead comes from `LOCALBEAT_SOURCE=CD`, which
+  Studio's sync writes into every Opus copy of a FLAC (since 2026-11-23;
+  copies made before then lack it until re-synced), and for music-server songs
+  from `suffix` flac (the server's FLAC library). Never guess from other tags
 
 - `Music/Artist/Album/NN. Artist - Title.opus`; multi-disc albums share one
   folder: `1.07. Artist - Title.opus`. Older fre:ac rips: `Music/Artist -
@@ -133,6 +137,10 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
 
 ## UI decisions (from the user)
 
+**Shared interface across phone, Android Auto and Studio** (2026-11-23):
+plan in **`docs/ui-refinement.md`**, terms in **`GLOSSARY.md`** (the one
+copy for the suite; Studio points here). Use the glossary's words on screen.
+
 - **Player controls always at the top of the screen**, in every mode. Never a
   bottom mini-player. Now Playing: full controls at the top, big art and the
   queue below. Spotify-style bottom navigation bar; no app title on the main
@@ -141,7 +149,7 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
   Figtree (default), Inter, Nunito Sans, Atkinson Hyperlegible Next
 - Light / dark / follow-system theme; colours **Prism** (default since 0.9,
   2026-11-11: the LocalBeat suite look shared with LocalBeat Studio, `ui/Theme.kt`
-  `Prism`, keep in step with CDRipPipeline `app/gui/src/theme.rs`) or Material
+  `Prism`, keep in step with LocalBeatStudio `gui/src/theme.rs`) or Material
   You from the wallpaper (Settings > Colours)
 - Big cover art (two-column album grid)
 - Queues, playlists (create **and share**: .m3u8 with paths relative to
@@ -219,7 +227,21 @@ decisions, 2026-11-17):
 
 A gold disc (#F2B33D) with a navy (#1B2A3A) eighth note, on navy: the phone
 app's launcher icon (`app/src/main/res/drawable/ic_launcher_foreground.xml`),
-also LocalBeat Studio's app icon and sidebar logo (CDRipPipeline
-`app/gui/assets/localbeat.svg`, `theme::logo`) and LocalBeatServer's.
+also LocalBeat Studio's app icon and sidebar logo (LocalBeatStudio
+`gui/assets/localbeat.svg`, `theme::logo`) and LocalBeatServer's.
 `docs/brand/localbeat.svg` is the same mark as an SVG (108-unit space like
 the adaptive icon). Change it in all three repos together.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `jimbo-yo/LocalBeat`, through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (created when first needed). See `docs/agents/domain.md`.

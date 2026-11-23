@@ -13,8 +13,11 @@ data class TrackTags(
     val discTotal: Int = 1,
     val year: Int = 0,
     val genre: String = "",
+    val mood: String = "",
     val musicBrainzAlbumId: String = "",
     val hasEmbeddedArt: Boolean = false,
+    /** `LOCALBEAT_SOURCE=CD`: Studio's phone sync made this file from a verified CD rip. */
+    val cdRip: Boolean = false,
 ) {
     companion object {
         /** cyanrip writes lowercase keys and whipper uppercase; lookups are case-insensitive. */
@@ -30,8 +33,10 @@ data class TrackTags(
             // The album's first release, not this CD's (Kink Kronikles: 1972, not the 1989 CD).
             year = year(c.first("ORIGINALDATE", "ORIGINALYEAR", "DATE", "YEAR")),
             genre = c.all("GENRE").filter { it.isNotBlank() }.joinToString("; "),
+            mood = c.all("MOOD").filter { it.isNotBlank() }.joinToString("; "),
             musicBrainzAlbumId = c["MUSICBRAINZ_ALBUMID"].orEmpty(),
             hasEmbeddedArt = c.hasPicture,
+            cdRip = c["LOCALBEAT_SOURCE"].equals("CD", ignoreCase = true),
         )
 
         /** "07", "7/12" -> 7 */

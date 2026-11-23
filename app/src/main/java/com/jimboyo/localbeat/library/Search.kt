@@ -1,5 +1,6 @@
 package com.jimboyo.localbeat.library
 
+import com.jimboyo.localbeat.playlists.Playlist
 import java.text.Normalizer
 
 /**
@@ -9,18 +10,39 @@ import java.text.Normalizer
  * every word across the name and its artist / album.
  */
 object Search {
-    class Results(val artists: List<Artist>, val albums: List<Album>, val tracks: List<Track>) {
-        val isEmpty get() = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty()
+    class Results(
+        val artists: List<Artist>,
+        val albums: List<Album>,
+        val tracks: List<Track>,
+        val moods: List<AlbumGroup> = emptyList(),
+        val genres: List<AlbumGroup> = emptyList(),
+        val decades: List<AlbumGroup> = emptyList(),
+        val playlists: List<Playlist> = emptyList(),
+    ) {
+        val isEmpty get() = artists.isEmpty() && albums.isEmpty() && tracks.isEmpty() &&
+            moods.isEmpty() && genres.isEmpty() && decades.isEmpty() && playlists.isEmpty()
     }
 
-    fun run(query: String, lib: Library, limit: Int = 200): Results {
+    fun run(query: String, lib: Library, playlists: List<Playlist> = emptyList(), limit: Int = 200): Results {
         val q = key(query)
         if (q.isEmpty()) return Results(emptyList(), emptyList(), emptyList())
         val words = q.split(' ')
         return Results(
-            ranked(lib.artists, q, words, limit) { it.name to "" },
-            ranked(lib.albums, q, words, limit) { it.title to it.artist },
-            ranked(lib.tracks, q, words, limit) { it.title to "${it.artist} ${it.filedUnder} ${it.album}" },
+            artists = ranked(lib.artists, q, words, limit) { it.name to "" },
+            albums = ranked(lib.albums, q, words, limit) { a ->
+                val tags = buildString {
+                    append(a.artist)
+                    if (a.year > 0) append(' ').append(a.year).append(' ').append(a.decadeLabel)
+                    a.genres.forEach { append(' ').append(it) }
+                    a.moods.forEach { append(' ').append(it) }
+                }
+                a.title to tags
+            },
+            tracks = ranked(lib.tracks, q, words, limit) { it.title to "${it.artist} ${it.filedUnder} ${it.album}" },
+            moods = ranked(lib.moods, q, words, limit) { it.name to "" },
+            genres = ranked(lib.genres, q, words, limit) { it.name to "" },
+            decades = ranked(lib.decades, q, words, limit) { it.name to it.name.removePrefix("19").removePrefix("20") },
+            playlists = ranked(playlists, q, words, limit) { it.name to it.owner },
         )
     }
 

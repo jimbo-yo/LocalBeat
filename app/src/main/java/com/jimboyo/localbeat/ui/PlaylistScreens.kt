@@ -108,7 +108,7 @@ private fun PlaylistRow(ui: Ui, lib: Library, p: Playlist) {
             )
         }
         val share = if (p.onServer) emptyList() else listOf(Action("Share") { ui.sharePlaylist(p) })
-        MoreButton(queueActions(ui, BrowseTree.PLAYLIST + p.id) { tracks } + share)
+        MoreButton(menu(queueActions(ui, BrowseTree.PLAYLIST + p.id) { tracks }, share + keepActions(ui) { tracks }))
     }
 }
 
@@ -224,15 +224,15 @@ private fun SharedPlaylistPage(ui: Ui, lib: Library, playlist: Playlist) {
                 )
                 PlayButtons(
                     onPlay = { ui.player.play(listId) }, onShuffle = { ui.player.play(listId, shuffled = true) },
-                    more = listOf(
-                        Action("Play next") { ui.player.playNext(listId) },
-                        Action("Add to queue") { ui.player.addToQueue(listId) },
-                    ) + listOfNotNull(server?.let { s ->
-                        Action("Make a copy") {
-                            ui.open(Screen.PlaylistPage(s.createPlaylist(playlist.name, playlist.entries)))
-                            ui.toast("Copied: it's yours to change")
-                        }
-                    }) + keepActions(ui) { tracks },
+                    more = menu(
+                        queueActions(ui, listId) { tracks },
+                        listOfNotNull(server?.let { s ->
+                            Action("Make a copy") {
+                                ui.open(Screen.PlaylistPage(s.createPlaylist(playlist.name, playlist.entries)))
+                                ui.toast("Copied: it's yours to change")
+                            }
+                        }) + keepActions(ui) { tracks },
+                    ),
                     tracks = tracks,
                 )
                 if (tracks.isEmpty()) Text(
@@ -305,13 +305,13 @@ fun PlaylistPage(ui: Ui, lib: Library, id: String) {
                 )
                 PlayButtons(
                     onPlay = { ui.player.play(listId) }, onShuffle = { ui.player.play(listId, shuffled = true) },
-                    more = listOf(
-                        Action("Play next") { ui.player.playNext(listId) },
-                        Action("Add to queue") { ui.player.addToQueue(listId) },
-                    ) + (if (playlist.onServer) emptyList() else listOf(Action("Share") { ui.sharePlaylist(playlist) })) + listOf(
-                        Action("Rename") { renaming = true },
-                        Action("Delete") { deleting = true },
-                    ) + keepActions(ui) { tracks },
+                    more = menu(
+                        queueActions(ui, listId) { tracks },
+                        (if (playlist.onServer) emptyList() else listOf(Action("Share") { ui.sharePlaylist(playlist) })) + listOf(
+                            Action("Rename") { renaming = true },
+                            Action("Delete") { deleting = true },
+                        ) + keepActions(ui) { tracks },
+                    ),
                     tracks = tracks,
                 )
                 if (entries.isEmpty()) Text(

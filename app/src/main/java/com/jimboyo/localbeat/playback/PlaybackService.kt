@@ -194,7 +194,12 @@ class PlaybackService : MediaLibraryService() {
 
         // Let Android Auto refresh its lists when the library or playlists change.
         scope.launch {
-            app.library.generation.drop(1).collect { notifyChanged(BrowseTree.ALBUMS, BrowseTree.ARTISTS, BrowseTree.GENRES, BrowseTree.DECADES, BrowseTree.SONGS, BrowseTree.RECENT) }
+            app.library.generation.drop(1).collect {
+                notifyChanged(
+                    BrowseTree.EXPLORE, BrowseTree.MOODS, BrowseTree.GENRES, BrowseTree.LIBRARY,
+                    BrowseTree.ALBUMS, BrowseTree.ARTISTS, BrowseTree.DECADES, BrowseTree.SONGS, BrowseTree.RECENT,
+                )
+            }
         }
         scope.launch {
             app.playlists.playlists.drop(1).collect { list ->
@@ -242,7 +247,7 @@ class PlaybackService : MediaLibraryService() {
         return listOf(
             CommandButton.Builder(CommandButton.ICON_UNDEFINED)
                 .setCustomIconResId(if (on) R.drawable.ic_on_phone else R.drawable.ic_all_music)
-                .setDisplayName(if (on) "Showing music on this phone" else "Showing all music")
+                .setDisplayName(if (on) "Showing only music on this phone" else "Showing all music")
                 .setSessionCommand(onPhoneCommand)
                 .setSlots(CommandButton.SLOT_OVERFLOW)
                 .build()

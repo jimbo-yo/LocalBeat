@@ -11,16 +11,16 @@ import org.junit.Test
 class LibraryTest {
     private val root = "/storage/emulated/0/Music/"
 
-    private fun track(rel: String, title: String, artist: String, album: String, year: Int = 0, genre: String = "", n: Int = 1) = Track(
+    private fun track(rel: String, title: String, artist: String, album: String, year: Int = 0, genre: String = "", mood: String = "", n: Int = 1) = Track(
         id = Track.idForPath(root + rel), mediaStoreId = 1, path = root + rel, modified = 0, size = 0, durationMs = 180_000,
         dateAdded = 0, title = title, artist = artist, albumArtist = artist, album = album, trackNumber = n, discNumber = 1,
-        discTotal = 1, year = year, genre = genre, musicBrainzAlbumId = "", hasEmbeddedArt = false,
+        discTotal = 1, year = year, genre = genre, musicBrainzAlbumId = "", hasEmbeddedArt = false, mood = mood,
     )
 
     private val lib = Library(
         listOf(
-            track("Guns N' Roses - Appetite/01 - Welcome.opus", "Welcome to the Jungle", "Guns N' Roses", "Appetite for Destruction", 1987, "Rock"),
-            track("Guns N’ Roses/Use Your Illusion I/01. Right Next Door.opus", "Right Next Door to Hell", "Guns N’ Roses", "Use Your Illusion I", 1991, "rock; hard rock"),
+            track("Guns N' Roses - Appetite/01 - Welcome.opus", "Welcome to the Jungle", "Guns N' Roses", "Appetite for Destruction", 1987, "Rock", "Energetic; Driving"),
+            track("Guns N’ Roses/Use Your Illusion I/01. Right Next Door.opus", "Right Next Door to Hell", "Guns N’ Roses", "Use Your Illusion I", 1991, "rock; hard rock", "gritty; driving"),
             track("Led Zeppelin/Led Zeppelin/01. Good Times.opus", "Good Times Bad Times", "Led Zeppelin", "Led Zeppelin", 1969),
             track("loose.mp3", "Loose", "", ""),
         )
@@ -37,7 +37,19 @@ class LibraryTest {
     fun genresAndDecades() {
         assertEquals(listOf("Hard Rock", "Rock"), lib.genres.map { it.name })
         assertEquals(2, lib.genres.first { it.name == "Rock" }.albums.size)
+        assertEquals(listOf("Driving", "Energetic", "Gritty"), lib.moods.map { it.name })
+        assertEquals(2, lib.moods.first { it.name == "Driving" }.albums.size)
         assertEquals(listOf("1960s", "1980s", "1990s"), lib.decades.map { it.name })
+
+        // LibraryCache v4 round-trips mood tags too.
+        val tmp = java.io.File.createTempFile("lb-cache", ".bin")
+        try {
+            com.jimboyo.localbeat.library.LibraryCache.write(tmp, lib.tracks)
+            val read = com.jimboyo.localbeat.library.LibraryCache.read(tmp)!!
+            assertEquals(lib.tracks, read)
+        } finally {
+            tmp.delete()
+        }
     }
 
     @Test
@@ -131,6 +143,29 @@ class LibraryTest {
         assertEquals(3, water.tracks.size)
         assertEquals(Library.VARIOUS_ARTISTS, water.artist)
         assertEquals(2, lib.albums.count { it.title == "Survivor" })
+
+        // Two multi-track single-artist albums dumped in the same Compilations/Greatest Hits folder stay apart.
+        val collided = Library(
+            listOf(
+                s("10", "Compilations/Greatest Hits/01 Swingtown.m4a", "Swingtown", "Steve Miller Band", "Greatest Hits"),
+                s("11", "Compilations/Greatest Hits/02 Jungle Love.m4a", "Jungle Love", "Steve Miller Band", "Greatest Hits"),
+                s("12", "Compilations/Greatest Hits/03 The Joker.m4a", "The Joker", "Steve Miller Band", "Greatest Hits"),
+                s("13", "Compilations/Greatest Hits/White Wedding.m4a", "White Wedding", "Billy Idol", "Greatest Hits"),
+                s("14", "Compilations/Greatest Hits/Rebel Yell.m4a", "Rebel Yell", "Billy Idol", "Greatest Hits"),
+                s("15", "Compilations/Greatest Hits/Mony Mony.m4a", "Mony Mony", "Billy Idol", "Greatest Hits"),
+            )
+        )
+        assertEquals(2, collided.albums.size)
+        assertEquals(listOf("Billy Idol", "Steve Miller Band"), collided.albums.map { it.artist }.sorted())
+
+        // A true compilation where two artists happen to have 3 tracks each among many others still merges.
+        val bigComp = Library(
+            (1..3).map { i -> s("h$i", "Compilations/Water Music/0$i.mp3", "H$i", "Handel", "Water Music") } +
+                (1..3).map { i -> s("m$i", "Compilations/Water Music/1$i.mp3", "M$i", "Minuet", "Water Music") } +
+                (1..10).map { i -> s("o$i", "Compilations/Water Music/2$i.mp3", "O$i", "Artist $i", "Water Music") }
+        )
+        assertEquals(1, bigComp.albums.size)
+        assertEquals(Library.VARIOUS_ARTISTS, bigComp.albums.single().artist)
     }
 
     /** Moving a phone playlist to the server: each song becomes the server's (docs/control.md step 5). */
@@ -203,5 +238,56 @@ class LibraryTest {
         assertEquals('#', letter("100% Deep House"))
         assertEquals('#', letter(""))
         assertEquals('A', letter("‘Allo ‘Allo"))
+    }
+
+    @Test
+    fun broadGenresHierarchyAndSearchAndVoice() {
+        val rich = Library(
+            listOf(
+                track("10k/In My Tribe/01.opus", "What's the Matter Here?", "10,000 Maniacs", "In My Tribe", 1987, "Alternative & Indie; Jangle Pop; Folk Rock", "Thoughtful; Warm; Mellow"),
+                track("GNR/Appetite/01.opus", "Welcome to the Jungle", "Guns N' Roses", "Appetite for Destruction", 1987, "Rock; Hard Rock", "Energetic; Driving; Gritty"),
+                track("ACDC/Back/01.opus", "Hells Bells", "AC/DC", "Back in Black", 1980, "Hard Rock", "Driving; Anthemic"),
+                track("Zep/IV/01.opus", "Black Dog", "Led Zeppelin", "Led Zeppelin IV", 1971, "Rock; Classic Rock", "Driving; Gritty"),
+            )
+        )
+        // Broad genres: "Alternative & Indie" and "Rock"; legacy single-tag "Hard Rock" folds under "Rock".
+        assertEquals(listOf("Alternative & Indie", "Rock"), rich.broadGenres.map { it.name })
+        val rock = rich.broadGenreByName("Rock")!!
+        assertEquals(3, rock.albums.size)
+        assertEquals(listOf("Hard Rock", "Classic Rock"), rock.subgenres.map { it.name })
+        assertEquals(2, rock.subgenres.first { it.name == "Hard Rock" }.albums.size)
+
+        // Search finds moods, genres/subgenres, decades ("80s"), playlists, and multi-word tag queries.
+        val pl = com.jimboyo.localbeat.playlists.Playlist("p1", "Road Trip", listOf("GNR/Appetite/01.opus"))
+        assertEquals(listOf("Driving"), com.jimboyo.localbeat.library.Search.run("driving", rich).moods.map { it.name })
+        assertEquals(listOf("Jangle Pop"), com.jimboyo.localbeat.library.Search.run("jangle", rich).genres.map { it.name })
+        assertEquals(listOf("1980s"), com.jimboyo.localbeat.library.Search.run("80s", rich).decades.map { it.name })
+        assertEquals(listOf("Road Trip"), com.jimboyo.localbeat.library.Search.run("road", rich, listOf(pl)).playlists.map { it.name })
+
+        // BrowseTree tracksFor resolves moods, broad genres (including folded legacy albums), subgenres, shuffle-all, and random album.
+        val tree = com.jimboyo.localbeat.playback.BrowseTree(null, { listOf(pl) })
+        assertEquals(3, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.GENRE + rock.id, rich)!!.size)
+        assertEquals(3, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_GENRE + rock.id, rich)!!.size)
+        val driving = rich.moodByName("Driving")!!
+        assertEquals(3, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.MOOD + driving.id, rich)!!.size)
+        assertEquals(3, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_MOOD + driving.id, rich)!!.size)
+        assertEquals(4, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_ALL, rich)!!.size)
+        assertEquals(1, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.RANDOM_ALBUM, rich)!!.size)
+        // "Shuffle <artist>" and "Shuffle <playlist>" play the same songs as the artist and the playlist.
+        val acdc = rich.artists.first { it.name == "AC/DC" }
+        assertEquals(acdc.tracks, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_ARTIST + acdc.id, rich))
+        assertEquals(
+            tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.PLAYLIST + pl.id, rich)!!.toSet(),
+            tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_PLAYLIST + pl.id, rich)!!.toSet(),
+        )
+
+        // Voice search resolves mood ("driving music"), subgenre ("jangle pop"), and decade ("80s music").
+        fun voiceReq(q: String) = androidx.media3.common.MediaItem.Builder()
+            .setRequestMetadata(androidx.media3.common.MediaItem.RequestMetadata.Builder().setSearchQuery(q).build())
+            .build()
+        assertEquals(3, tree.resolve(voiceReq("driving music"), rich).tracks.size)
+        assertEquals(listOf("What's the Matter Here?"), tree.resolve(voiceReq("jangle pop"), rich).tracks.map { it.title })
+        assertEquals(3, tree.resolve(voiceReq("80s music"), rich).tracks.size)
+        assertEquals(listOf("Black Dog"), tree.resolve(voiceReq("seventies"), rich).tracks.map { it.title })
     }
 }

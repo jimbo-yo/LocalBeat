@@ -279,8 +279,14 @@ object ControlArgs {
      */
     fun item(arg: String): MediaItem {
         val a = arg.trim()
-        val ids = listOf(BrowseTree.PLAYLIST, BrowseTree.ALBUM, BrowseTree.ARTIST, BrowseTree.ARTIST_ALL, BrowseTree.TRACK, BrowseTree.GENRE, BrowseTree.DECADE)
-        if (!a.startsWith("search:") && (a == BrowseTree.SONGS || ids.any { a.startsWith(it) })) {
+        val ids = listOf(
+            BrowseTree.PLAYLIST, BrowseTree.ALBUM, BrowseTree.ARTIST, BrowseTree.ARTIST_ALL,
+            BrowseTree.TRACK, BrowseTree.GENRE, BrowseTree.MOOD, BrowseTree.DECADE,
+            BrowseTree.SHUFFLE_GENRE, BrowseTree.SHUFFLE_MOOD, BrowseTree.SHUFFLE_DECADE,
+            BrowseTree.SHUFFLE_ARTIST, BrowseTree.SHUFFLE_PLAYLIST,
+        )
+        val exact = setOf(BrowseTree.SONGS, BrowseTree.SHUFFLE_ALL, BrowseTree.RANDOM_ALBUM)
+        if (!a.startsWith("search:") && (a in exact || ids.any { a.startsWith(it) })) {
             return MediaItem.Builder().setMediaId(a).build()
         }
         val words = a.removePrefix("search:").trim()

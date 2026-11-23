@@ -31,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,17 +55,28 @@ import com.jimboyo.localbeat.library.Library
 import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.playlists.Playlist
 
-/** A menu entry. */
-class Action(val label: String, val run: () -> Unit)
+/** A menu entry; [divider] draws a line above it. */
+class Action(val label: String, val divider: Boolean = false, val run: () -> Unit)
 
-/** The standard actions for anything playable: a song, album, artist, playlist… */
+/**
+ * A menu in the suite's shared order (docs/ui-refinement.md): the shared items first
+ * (Play next, Add to queue, Add to playlist…, Go to album, Go to artist), then a divider
+ * and this phone's own (Keep on phone, Remove from phone, Rename…).
+ */
+fun menu(shared: List<Action>, own: List<Action>): List<Action> =
+    shared + own.mapIndexed { i, a -> if (i == 0 && shared.isNotEmpty()) Action(a.label, divider = true, run = a.run) else a }
+
+/** The first shared actions for anything playable: a song, album, artist, playlist… */
 fun queueActions(ui: Ui, mediaId: String, tracks: () -> List<Track>): List<Action> = listOf(
     Action("Play next") { ui.player.playNext(mediaId); ui.toast("Playing next") },
     Action("Add to queue") { ui.player.addToQueue(mediaId); ui.toast("Added to queue") },
     Action("Add to playlist…") { ui.addToPlaylist = tracks() },
-) + keepActions(ui, tracks)
+)
 
-/** "Keep on phone" / "Remove from phone" for whatever of these is on the music server. */
+/**
+ * "Keep on phone" / "Remove from phone" for whatever of these is on the music server.
+ * Only kept songs can be removed: synced albums (put on by Studio) are Studio's to remove.
+ */
 fun keepActions(ui: Ui, tracks: () -> List<Track>): List<Action> {
     val server = ui.app.server ?: return emptyList()
     val list = tracks().filter { it.onServer }
@@ -144,7 +156,10 @@ fun MoreButton(actions: List<Action>) {
 @Composable
 fun ActionMenu(open: Boolean, actions: List<Action>, onDismiss: () -> Unit) {
     DropdownMenu(expanded = open, onDismissRequest = onDismiss) {
-        actions.forEach { a -> DropdownMenuItem(text = { Text(a.label) }, onClick = { onDismiss(); a.run() }) }
+        actions.forEach { a ->
+            if (a.divider) HorizontalDivider()
+            DropdownMenuItem(text = { Text(a.label) }, onClick = { onDismiss(); a.run() })
+        }
     }
 }
 

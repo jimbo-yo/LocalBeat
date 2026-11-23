@@ -13,45 +13,41 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material3.TextButton
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Slider
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -76,7 +72,6 @@ import androidx.media3.common.Player
 import com.jimboyo.localbeat.LocalBeatApp
 import com.jimboyo.localbeat.library.Library
 import com.jimboyo.localbeat.library.Track
-import com.jimboyo.localbeat.playback.BrowseTree
 import com.jimboyo.localbeat.playlists.Playlist
 import com.jimboyo.localbeat.server.OfflineState
 import kotlinx.coroutines.delay
@@ -84,25 +79,31 @@ import kotlinx.coroutines.delay
 sealed interface Screen {
     data class AlbumPage(val id: String) : Screen
     data class ArtistPage(val id: String) : Screen
+    data class BroadGenrePage(val id: String) : Screen
     data class GenrePage(val id: String) : Screen
+    data class MoodPage(val id: String) : Screen
     data class DecadePage(val id: String) : Screen
+    data object RecentPage : Screen
     data class PlaylistPage(val id: String) : Screen
     data object NowPlaying : Screen
     data object Equalizer : Screen
     data object Settings : Screen
 }
 
-/** The bottom navigation bar's destinations. */
+/** The bottom navigation bar's 4 destinations. */
 enum class Dest(val label: String, val icon: ImageVector) {
-    ALBUMS("Albums", Icons.Default.Album),
-    SEARCH("Search", Icons.Default.Search),
-    ARTISTS("Artists", Icons.Default.Person),
+    EXPLORE("Explore", Icons.Default.Explore),
+    LIBRARY("Library", Icons.Default.LibraryMusic),
     PLAYLISTS("Playlists", Icons.AutoMirrored.Filled.QueueMusic),
-    BROWSE("Browse", Icons.Default.Explore),
+    SEARCH("Search", Icons.Default.Search),
 }
 
-/** The lists inside Browse. */
-enum class BrowseTab(val label: String) { GENRES("Genres"), DECADES("Decades"), SONGS("Songs"), RECENT("Recent") }
+/** The lists inside the Library tab. */
+enum class LibraryTab(val label: String) {
+    ALBUMS("Albums"),
+    ARTISTS("Artists"),
+    SONGS("Songs"),
+}
 
 /** Navigation and dialog state, plus the things screens need. */
 class Ui(
@@ -113,8 +114,8 @@ class Ui(
 ) {
     /** Pages opened on top of the current destination (album, artist, Now Playing…). */
     val stack = mutableStateListOf<Screen>()
-    var dest by mutableStateOf(Dest.ALBUMS)
-    var browseTab by mutableStateOf(BrowseTab.GENRES)
+    var dest by mutableStateOf(Dest.EXPLORE)
+    var libraryTab by mutableStateOf(LibraryTab.ALBUMS)
     /** Songs waiting for the "add to playlist" dialog. */
     var addToPlaylist by mutableStateOf<List<Track>?>(null)
     /** What's typed in the Search tab (kept while browsing results). */
@@ -131,10 +132,17 @@ class Ui(
     fun pageKey(i: Int) = "page$i:${stack[i]}"
 
     /** The saved-state key of the current main list. */
-    fun listKey() = if (dest == Dest.BROWSE) "list:$dest:$browseTab" else "list:$dest"
+    fun listKey() = if (dest == Dest.LIBRARY) "list:$dest:$libraryTab" else "list:$dest"
 
     fun open(s: Screen) {
         if (stack.lastOrNull() != s) stack.add(s)
+    }
+
+    /** Opens a genre as a BroadGenrePage if it has child subgenres, else a leaf GenrePage. */
+    fun openGenre(lib: Library, id: String) {
+        val broad = lib.broadGenre(id)
+        if (broad != null && broad.subgenres.isNotEmpty()) open(Screen.BroadGenrePage(id))
+        else open(Screen.GenrePage(id))
     }
 
     fun back() {
@@ -142,7 +150,7 @@ class Ui(
             // A page closed is gone: opening it again starts at the top.
             savedStates?.removeState(pageKey(stack.lastIndex))
             stack.removeAt(stack.lastIndex)
-        } else if (dest != Dest.ALBUMS) dest = Dest.ALBUMS
+        } else if (dest != Dest.EXPLORE) dest = Dest.EXPLORE
     }
 
     /** Clears all stacked pages and their saved scroll states. */
@@ -174,15 +182,16 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
     val top = ui.stack.lastOrNull()
     val savedStates = rememberSaveableStateHolder()
     ui.savedStates = savedStates
+    val hasServerSongs = ui.app.server != null && all.tracks.any { it.onServer }
 
     LaunchedEffect(Unit) { ui.app.server?.offline?.collect { ui.offline = it } }
-    BackHandler(enabled = ui.stack.isNotEmpty() || ui.dest != Dest.ALBUMS) { ui.back() }
+    BackHandler(enabled = ui.stack.isNotEmpty() || ui.dest != Dest.EXPLORE) { ui.back() }
 
     CompositionLocalProvider(LocalPlayer provides ui.player, LocalUi provides ui) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             // The player controls are always at the top, whatever screen is showing.
-            TopControls(ui, all, expanded = top == Screen.NowPlaying)
+            TopControls(ui, all, expanded = top == Screen.NowPlaying, showOnPhonePill = hasServerSongs)
             if (scanning) LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
             ServerBanner(ui)
 
@@ -193,12 +202,15 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
             // Only pages opened on top get a title row (they need a back button);
             // the main lists use the whole space.
             if (top != null) BackBar(ui, lib, top)
-            val hasServerSongs = ui.app.server != null && all.tracks.any { it.onServer }
             if (top == null && ui.dest in ON_PHONE_TABS && hasServerSongs) DownloadStatus(ui)
-            if (top == null && ui.dest == Dest.BROWSE) {
-                PrimaryTabRow(selectedTabIndex = ui.browseTab.ordinal) {
-                    BrowseTab.entries.forEach { t ->
-                        Tab(selected = ui.browseTab == t, onClick = { ui.browseTab = t }, text = { Text(t.label, style = MaterialTheme.typography.titleSmall) })
+            if (top == null && ui.dest == Dest.LIBRARY) {
+                PrimaryTabRow(selectedTabIndex = ui.libraryTab.ordinal) {
+                    LibraryTab.entries.forEach { t ->
+                        Tab(
+                            selected = ui.libraryTab == t,
+                            onClick = { ui.libraryTab = t },
+                            text = { Text(t.label, style = MaterialTheme.typography.titleSmall) },
+                        )
                     }
                 }
             }
@@ -212,20 +224,21 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                     all.tracks.isEmpty() -> Message("No music found in Internal Storage/Music.", "Rescan") { ui.app.library.rescan(); ui.app.server?.refresh() }
                     top is Screen.AlbumPage -> lib.album(top.id)?.let { AlbumPage(ui, lib, it) } ?: Message("This album isn't available right now.", "Back", ui::back)
                     top is Screen.ArtistPage -> lib.artist(top.id)?.let { ArtistPage(ui, lib, it) } ?: Message("This artist isn't available right now.", "Back", ui::back)
-                    top is Screen.GenrePage -> lib.genre(top.id)?.let { GroupPage(ui, it, BrowseTree.GENRE + it.id) } ?: Message("This genre isn't available right now.", "Back", ui::back)
-                    top is Screen.DecadePage -> lib.decade(top.id)?.let { GroupPage(ui, it, BrowseTree.DECADE + it.id) } ?: Message("This decade isn't available right now.", "Back", ui::back)
+                    top is Screen.BroadGenrePage -> lib.broadGenre(top.id)?.let { BroadGenrePage(ui, lib, it) } ?: Message("This genre isn't available right now.", "Back", ui::back)
+                    top is Screen.GenrePage -> (lib.broadGenre(top.id)?.asGroup() ?: lib.genre(top.id))?.let { GenrePage(ui, lib, it) } ?: Message("This genre isn't available right now.", "Back", ui::back)
+                    top is Screen.MoodPage -> lib.mood(top.id)?.let { MoodPage(ui, lib, it) } ?: Message("This mood isn't available right now.", "Back", ui::back)
+                    top is Screen.DecadePage -> lib.decade(top.id)?.let { DecadePage(ui, lib, it) } ?: Message("This decade isn't available right now.", "Back", ui::back)
+                    top == Screen.RecentPage -> AlbumGrid(ui, lib.recentlyAdded) { a -> if (a.year > 0) "${a.artist} · ${a.year}" else a.artist }
                     top is Screen.PlaylistPage -> PlaylistPage(ui, lib, top.id)
                     else -> when (ui.dest) {
-                        Dest.ALBUMS -> AlbumGrid(ui, lib.albums, fastScroll = true) { it.artist }
-                        Dest.SEARCH -> SearchScreen(ui, lib)
-                        Dest.ARTISTS -> ArtistList(ui, lib)
-                        Dest.PLAYLISTS -> PlaylistList(ui, lib)
-                        Dest.BROWSE -> when (ui.browseTab) {
-                            BrowseTab.GENRES -> GroupList(ui, lib.genres, emptyText = GENRE_HELP) { ui.open(Screen.GenrePage(it.id)) }
-                            BrowseTab.DECADES -> GroupList(ui, lib.decades, emptyText = "No albums have a year tag.") { ui.open(Screen.DecadePage(it.id)) }
-                            BrowseTab.SONGS -> SongList(ui, lib)
-                            BrowseTab.RECENT -> AlbumGrid(ui, lib.recentlyAdded) { it.artist }
+                        Dest.EXPLORE -> ExploreScreen(ui, lib)
+                        Dest.LIBRARY -> when (ui.libraryTab) {
+                            LibraryTab.ALBUMS -> LibraryAlbumsScreen(ui, lib)
+                            LibraryTab.ARTISTS -> ArtistList(ui, lib)
+                            LibraryTab.SONGS -> SongList(ui, lib)
                         }
+                        Dest.PLAYLISTS -> PlaylistList(ui, lib)
+                        Dest.SEARCH -> SearchScreen(ui, lib)
                     }
                 }
             } }
@@ -238,8 +251,6 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
                         label = { Text(d.label, style = MaterialTheme.typography.labelMedium) },
                     )
                 }
-                // The "On this phone" switch (only with a music server).
-                if (hasServerSongs) OnPhoneToggle(ui)
             }
         }
     }
@@ -249,24 +260,39 @@ fun LocalBeatUi(ui: Ui, hasPermission: Boolean, onGrant: () -> Unit) {
     }
 }
 
-private val ON_PHONE_TABS = setOf(Dest.ALBUMS, Dest.SEARCH, Dest.ARTISTS, Dest.BROWSE)
+private val ON_PHONE_TABS = setOf(Dest.EXPLORE, Dest.LIBRARY, Dest.SEARCH)
 
 /**
- * The "On this phone" switch in the bottom bar: not a page, a toggle. On, the lists
- * hide music-server songs that aren't kept on the phone.
+ * Compact "On this phone" toggle in the top bar (Connected edition when the server has songs).
+ * Highlighted when showing only music stored on this phone.
  */
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.OnPhoneToggle(ui: Ui) {
+private fun OnPhoneTopPill(ui: Ui) {
     val onPhone by ui.app.library.onPhoneOnly.collectAsStateWithLifecycle()
-    // Not connected: only the phone's music shows anyway, so the switch has nothing to do.
     val connected by (ui.app.server?.connected ?: return).collectAsStateWithLifecycle()
-    NavigationBarItem(
-        selected = onPhone || !connected,
+    val active = onPhone || !connected
+    Surface(
+        onClick = {
+            if (connected) {
+                val next = !onPhone
+                ui.app.library.setOnPhoneOnly(next)
+                ui.toast(if (next) "Showing only music on this phone" else "Showing all music")
+            }
+        },
         enabled = connected,
-        onClick = { ui.app.library.setOnPhoneOnly(!onPhone) },
-        icon = { Icon(if (onPhone) Icons.Filled.PhoneAndroid else Icons.Outlined.PhoneAndroid, if (onPhone) "Showing only music on this phone" else "Show only music on this phone") },
-        label = { Text("On phone", style = MaterialTheme.typography.labelMedium, maxLines = 1) },
-    )
+        shape = RoundedCornerShape(16.dp),
+        color = if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
+        contentColor = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(end = 2.dp),
+    ) {
+        Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+            Icon(
+                if (active) Icons.Filled.PhoneAndroid else Icons.Outlined.PhoneAndroid,
+                contentDescription = if (active) "Showing only music on this phone" else "Show only music on this phone",
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
 }
 
 /**
@@ -309,8 +335,6 @@ private fun DownloadStatus(ui: Ui) {
     )
 }
 
-private const val GENRE_HELP = "None of your albums have a genre tag yet. New rips get them from MusicBrainz."
-
 @Composable
 private fun BackBar(ui: Ui, lib: Library, top: Screen) {
     Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -319,8 +343,11 @@ private fun BackBar(ui: Ui, lib: Library, top: Screen) {
             when (top) {
                 is Screen.AlbumPage -> lib.album(top.id)?.title.orEmpty()
                 is Screen.ArtistPage -> lib.artist(top.id)?.name.orEmpty()
-                is Screen.GenrePage -> lib.genre(top.id)?.name.orEmpty()
+                is Screen.BroadGenrePage -> lib.broadGenre(top.id)?.name.orEmpty()
+                is Screen.GenrePage -> (lib.broadGenre(top.id)?.name ?: lib.genre(top.id)?.name).orEmpty()
+                is Screen.MoodPage -> lib.mood(top.id)?.name.orEmpty()
                 is Screen.DecadePage -> lib.decade(top.id)?.name.orEmpty()
+                Screen.RecentPage -> "Recently added"
                 is Screen.PlaylistPage -> ui.app.playlist(top.id)?.name.orEmpty()
                 Screen.NowPlaying -> ""
                 Screen.Equalizer -> "Equalizer"
@@ -344,7 +371,7 @@ private fun Message(text: String, action: String, onAction: () -> Unit) {
 // ---- the always-on-top player controls ----
 
 @Composable
-private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
+private fun TopControls(ui: Ui, lib: Library, expanded: Boolean, showOnPhonePill: Boolean) {
     val p = ui.player
     val track = p.currentTrackId?.let(lib::track)
     val album = track?.let(lib::albumOf)
@@ -355,16 +382,17 @@ private fun TopControls(ui: Ui, lib: Library, expanded: Boolean) {
                     Modifier.weight(1f).clickable(enabled = track != null) { ui.open(Screen.NowPlaying) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AlbumArt(album, Modifier.size(60.dp), maxPx = 200)
-                    Column(Modifier.padding(start = 12.dp, end = 4.dp)) {
+                    AlbumArt(album, Modifier.size(56.dp), maxPx = 200)
+                    Column(Modifier.padding(start = 10.dp, end = 4.dp)) {
                         Text(track?.title ?: "Nothing playing", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(track?.let { it.artist.ifBlank { it.filedUnder } } ?: "Pick an album or song", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                IconButton(onClick = { p.previous() }, enabled = track != null) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(30.dp)) }
-                PlayPauseButton(p.isPlaying, p::togglePlay, size = 50.dp, iconSize = 30.dp, enabled = track != null)
-                IconButton(onClick = { p.next() }, enabled = track != null) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(30.dp)) }
-                IconButton(onClick = { ui.open(Screen.Settings) }, Modifier.size(40.dp)) {
+                IconButton(onClick = { p.previous() }, enabled = track != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.SkipPrevious, "Previous", Modifier.size(28.dp)) }
+                PlayPauseButton(p.isPlaying, p::togglePlay, size = 48.dp, iconSize = 28.dp, enabled = track != null)
+                IconButton(onClick = { p.next() }, enabled = track != null, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.SkipNext, "Next", Modifier.size(28.dp)) }
+                if (showOnPhonePill) OnPhoneTopPill(ui)
+                IconButton(onClick = { ui.open(Screen.Settings) }, Modifier.size(38.dp)) {
                     Icon(Icons.Default.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

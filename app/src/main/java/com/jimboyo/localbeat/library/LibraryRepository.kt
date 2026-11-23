@@ -260,6 +260,8 @@ class LibraryRepository(private val context: Context) {
             discTotal = tags.discTotal,
             year = tags.year,
             genre = tags.genre,
+            mood = tags.mood,
+            cdRip = tags.cdRip,
             musicBrainzAlbumId = tags.musicBrainzAlbumId,
             hasEmbeddedArt = tags.hasEmbeddedArt,
         )

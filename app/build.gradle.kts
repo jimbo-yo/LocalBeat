@@ -22,8 +22,8 @@ android {
         // Personal app for a Pixel 9; 33 is the first release with READ_MEDIA_AUDIO.
         minSdk = 33
         targetSdk = 36
-        versionCode = 29
-        versionName = "0.9.20"
+        versionCode = 31
+        versionName = "0.9.22"
     }
 
     signingConfigs {

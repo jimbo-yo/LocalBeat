@@ -1,7 +1,12 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.jimboyo.localbeat.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -40,17 +46,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-/** The Search tab: artists, albums and songs, phone and server alike, as you type. */
+/** The Search tab: moods, genres, decades, playlists, artists, albums and songs, as you type. */
 @Composable
 fun SearchScreen(ui: Ui, lib: Library) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val query = ui.searchQuery
-    val results by produceState<Search.Results?>(null, query, lib) {
+    val playlists = ui.app.allPlaylists()
+    val results by produceState<Search.Results?>(null, query, lib, playlists) {
         value = null
         if (query.isBlank()) return@produceState
         delay(120) // let fast typing settle
-        value = withContext(Dispatchers.Default) { Search.run(query, lib) }
+        value = withContext(Dispatchers.Default) { Search.run(query, lib, playlists) }
     }
     LaunchedEffect(Unit) { if (query.isEmpty()) focus.requestFocus() }
 
@@ -59,7 +66,7 @@ fun SearchScreen(ui: Ui, lib: Library) {
             query, { ui.searchQuery = it },
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).focusRequester(focus),
             singleLine = true,
-            placeholder = { Text("Albums, artists, songs") },
+            placeholder = { Text("Albums, artists, moods, genres, songs") },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = {
                 if (query.isNotEmpty()) IconButton(onClick = { ui.searchQuery = ""; focus.requestFocus() }) { Icon(Icons.Default.Clear, "Clear") }
@@ -70,11 +77,78 @@ fun SearchScreen(ui: Ui, lib: Library) {
         val r = results
         LazyColumn(contentPadding = listPadding()) {
             when {
-                query.isBlank() -> item { Hint("Type part of a name: “zep”, “morning glory”, “springsteen thunder”.") }
+                query.isBlank() -> item { Hint("Type a name, mood, genre, or decade: “driving”, “jangle pop”, “80s”, “springsteen thunder”.") }
                 r == null -> Unit
                 r.isEmpty -> item { Hint("Nothing found for “$query”.") }
             }
             if (query.isNotBlank() && r != null) {
+                if (r.moods.isNotEmpty()) {
+                    item(key = "h-moods") { Heading("Moods") }
+                    item(key = "moods-chips") {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            r.moods.forEach { m ->
+                                TagChip("${m.name} (${m.albums.size})", isMood = true) {
+                                    keyboard?.hide()
+                                    ui.open(Screen.MoodPage(m.id))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (r.genres.isNotEmpty()) {
+                    item(key = "h-genres") { Heading("Genres") }
+                    item(key = "genres-chips") {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            r.genres.forEach { g ->
+                                TagChip("${g.name} (${g.albums.size})") {
+                                    keyboard?.hide()
+                                    ui.openGenre(lib, g.id)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (r.decades.isNotEmpty()) {
+                    item(key = "h-decades") { Heading("Decades") }
+                    item(key = "decades-chips") {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            r.decades.forEach { d ->
+                                TagChip("${d.name} (${d.albums.size})") {
+                                    keyboard?.hide()
+                                    ui.open(Screen.DecadePage(d.id))
+                                }
+                            }
+                        }
+                    }
+                }
+                if (r.playlists.isNotEmpty()) item(key = "h-playlists") { Heading("Playlists") }
+                items(r.playlists, key = { "pl-${if (it.onServer) "s" else "p"}-${it.id}" }) { p ->
+                    val tracks = p.tracks(lib)
+                    Row(
+                        Modifier.fillMaxWidth().clickable { keyboard?.hide(); ui.open(Screen.PlaylistPage(p.id)) }.padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val cover = tracks.firstNotNullOfOrNull { t -> lib.albumOf(t)?.takeIf { a -> a.tracks.any { it.hasEmbeddedArt } } }
+                        if (cover != null) AlbumArt(cover, Modifier.size(48.dp), maxPx = 160)
+                        else Icon(Icons.AutoMirrored.Filled.QueueMusic, null, Modifier.size(48.dp).padding(8.dp))
+                        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+                            Text(p.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(plural(tracks.size, "song"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 if (r.artists.isNotEmpty()) item(key = "h-artists") { Heading("Artists") }
                 items(r.artists, key = { "ar-" + it.id }) { artist ->
                     Row(Modifier.fillMaxWidth().clickable { ui.open(Screen.ArtistPage(artist.id)) }.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {

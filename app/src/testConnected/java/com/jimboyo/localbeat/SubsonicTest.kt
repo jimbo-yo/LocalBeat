@@ -56,7 +56,7 @@ class SubsonicTest {
         JSONObject("""{"id":"s1","title":"Thunder Road","artist":"Bruce Springsteen","displayAlbumArtist":"Bruce Springsteen",
             "album":"Born to Run","albumId":"al1","track":1,"discNumber":1,"year":2005,"duration":290,"size":32000000,
             "suffix":"flac","path":"Bruce Springsteen/Born to Run/01-01 - Thunder Road.flac","coverArt":"mf-s1_0",
-            "created":"2026-11-08T21:37:01.123Z","genres":[{"name":"Rock"},{"name":"Heartland Rock"}]}"""),
+            "created":"2026-11-08T21:37:01.123Z","genres":[{"name":"Rock"},{"name":"Heartland Rock"}],"moods":["Driving","Epic"]}"""),
         JSONObject("""{"id":"s2","title":"Smokestack Lightnin’","artist":"Howlin’ Wolf","album":"Moanin’ in the Moonlight",
             "albumId":"al2","track":4,"duration":187,"genre":"Blues"}"""),
         JSONObject("""{"title":"no id: skipped"}"""),
@@ -70,10 +70,12 @@ class SubsonicTest {
         assertEquals(1975, t.year) // the album's original release, like ORIGINALDATE
         assertEquals("0a8e97fd-457c-30bc-938a-2fba79cb04e7", t.musicBrainzAlbumId)
         assertEquals("Rock; Heartland Rock", t.genre)
+        assertEquals("Driving; Epic", t.mood)
         assertEquals(290_000L, t.durationMs)
         assertEquals("s1", t.serverSongId)
         assertEquals("mf-s1_0", t.serverCoverArt)
         assertTrue(t.onServer && t.hasEmbeddedArt)
+        assertTrue(t.cdRip) // from the FLAC library
         assertEquals(java.time.Instant.parse("2026-11-08T21:37:01Z").epochSecond, t.dateAdded)
 
         val wolf = tracks[1]
@@ -82,6 +84,7 @@ class SubsonicTest {
         assertEquals("Blues", wolf.genre)
         assertEquals(1, wolf.discNumber)
         assertTrue(!wolf.hasEmbeddedArt)
+        assertTrue(!wolf.cdRip) // no suffix: not known to be a CD rip
 
         // IDs differ per server, and never collide with the phone's ("t…").
         val other = SubsonicApi.toTracks("http://other:4533|jim", albums, songs)
