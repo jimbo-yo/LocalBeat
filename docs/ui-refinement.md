@@ -83,6 +83,11 @@ Search**.
    (step 2).
 2. **Studio wording and menus:** Queue, music server, CD rip, menu order,
    search sections and order, album sort.
+   *Status 2026-11-23:* built in `gui/src/library_ui.rs`. Search has
+   Playlists, Artists, Albums, Songs; the Moods/Genres/Decades chips come
+   with their pages in step 3. The sidebar Server item's tooltip in
+   `main.rs` still says "The LocalBeat server" (that file had other work in
+   progress).
 3. **Studio Explore and group pages:** Explore, Genres/Subgenres, Moods,
    Decades, cross-filters, album-page and Details chips; Recently added moves
    into Explore.
