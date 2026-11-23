@@ -91,6 +91,12 @@ Search**.
 3. **Studio Explore and group pages:** Explore, Genres/Subgenres, Moods,
    Decades, cross-filters, album-page and Details chips; Recently added moves
    into Explore.
+   *Status 2026-11-23:* built (LocalBeatStudio `core/src/browse.rs`, the
+   phone's grouping rules with its test library; `gui/src/library_ui/explore.rs`).
+   Sidebar: Explore, Albums, Artists, Songs, Playlists; Explore is the
+   default page. Genre/mood/decade pages have Subgenres and cross-filter
+   chips like the phone, but no Albums/Artists view switch. Search starts with
+   mood, genre and decade chips.
 4. **Studio player behaviour:** queue panel on every LIBRARY page, queue
    actions, shuffle and repeat.
 
