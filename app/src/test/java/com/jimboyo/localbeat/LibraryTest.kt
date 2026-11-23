@@ -273,6 +273,9 @@ class LibraryTest {
         assertEquals(3, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_MOOD + driving.id, rich)!!.size)
         assertEquals(4, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_ALL, rich)!!.size)
         assertEquals(1, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.RANDOM_ALBUM, rich)!!.size)
+        // A Shuffle button's queue: every song of the list, mixed song by song (not album by album).
+        val rockSongs = tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.GENRE + rock.id, rich)!!
+        assertEquals(rockSongs.toSet(), tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLED + com.jimboyo.localbeat.playback.BrowseTree.GENRE + rock.id, rich)!!.toSet())
         // "Shuffle <artist>" and "Shuffle <playlist>" play the same songs as the artist and the playlist.
         val acdc = rich.artists.first { it.name == "AC/DC" }
         assertEquals(acdc.tracks, tree.tracksFor(com.jimboyo.localbeat.playback.BrowseTree.SHUFFLE_ARTIST + acdc.id, rich))

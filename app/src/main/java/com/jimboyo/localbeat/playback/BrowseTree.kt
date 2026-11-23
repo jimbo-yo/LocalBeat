@@ -34,6 +34,7 @@ import com.jimboyo.localbeat.playlists.Playlist
  * - `shuffleall`, `randomalbum`, `shuffleartist:<id>`, `shuffleplaylist:<id>`,
  *   `shufflemood:<id>`, `shufflegenre:<id>`, `shuffledecade:<id>`
  * - `artistall:<id>`: all an artist's songs in order (the list loose songs play from)
+ * - `shuffled:<any list ID>`: that list's songs, mixed song by song (the Shuffle buttons)
  * - `browse`, `more`: old IDs, kept as aliases of `explore` and `library`
  * - `t:<id>`: one track (what the player's queue holds)
  * - `<list>/<position>|t:<id>`: a track tapped in a list; plays the list from there.
@@ -271,6 +272,7 @@ class BrowseTree(
             SHUFFLE_DECADE -> lib.decade(id)?.albums?.flatMap { it.tracks }?.shuffled()
             PLAYLIST -> findPlaylist(id)?.tracks(lib)
             SHUFFLE_PLAYLIST -> findPlaylist(id)?.tracks(lib)?.shuffled()
+            SHUFFLED -> tracksFor(id, lib)?.shuffled()
             SONGS -> lib.tracks
             SHUFFLE_ALL -> lib.tracks.shuffled()
             RANDOM_ALBUM -> lib.albums.randomOrNull()?.tracks.orEmpty()
@@ -542,6 +544,7 @@ class BrowseTree(
         const val RANDOM_ALBUM = "randomalbum"
         const val SHUFFLE_GENRE = "shufflegenre:"
         const val SHUFFLE_ARTIST = "shuffleartist:"
+        const val SHUFFLED = "shuffled:"
         const val SHUFFLE_PLAYLIST = "shuffleplaylist:"
         const val SHUFFLE_MOOD = "shufflemood:"
         const val SHUFFLE_DECADE = "shuffledecade:"

@@ -100,11 +100,15 @@ class PlayerConnection(private val context: Context) {
 
     val positionMs: Long get() = controller?.currentPosition ?: 0
 
-    /** Plays a browse-tree item: an album, artist, playlist, or a track in its list (see [BrowseTree]). */
+    /**
+     * Plays a browse-tree item: an album, artist, playlist, or a track in its list (see [BrowseTree]).
+     * [shuffled]: its songs go into the queue already mixed, song by song, so the queue shows
+     * what plays (shuffle mode would keep album order on screen and start with the first song).
+     */
     fun play(mediaId: String, shuffled: Boolean = false) {
         val c = controller ?: return
-        c.shuffleModeEnabled = shuffled
-        c.setMediaItem(item(mediaId))
+        c.shuffleModeEnabled = false
+        c.setMediaItem(item(if (shuffled) BrowseTree.SHUFFLED + mediaId else mediaId))
         c.prepare()
         c.play()
     }
@@ -113,8 +117,8 @@ class PlayerConnection(private val context: Context) {
     fun playTracks(tracks: List<com.jimboyo.localbeat.library.Track>, shuffled: Boolean = false) {
         val c = controller ?: return
         if (tracks.isEmpty()) return
-        c.shuffleModeEnabled = shuffled
-        c.setMediaItems(tracks.map { item(BrowseTree.TRACK + it.id) }, 0, 0L)
+        c.shuffleModeEnabled = false
+        c.setMediaItems((if (shuffled) tracks.shuffled() else tracks).map { item(BrowseTree.TRACK + it.id) }, 0, 0L)
         c.prepare()
         c.play()
     }
