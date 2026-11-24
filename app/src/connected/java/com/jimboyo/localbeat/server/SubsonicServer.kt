@@ -52,11 +52,15 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             password = prefs.getString("password", "").orEmpty(),
             useMobileData = prefs.getBoolean("mobileData", false),
             connectionSound = prefs.getBoolean("connectionSound", true),
+            tunnel = EmbeddedTunnelConfig.fromJson(prefs.getString("tunnel", null)),
         )
     )
     override val settings: StateFlow<ServerSettings> = _settings.asStateFlow()
     private val _status = MutableStateFlow<ServerStatus>(ServerStatus.Off)
     override val status: StateFlow<ServerStatus> = _status.asStateFlow()
+    private val _tunnelState = MutableStateFlow(TunnelLinkState.Off)
+    override val tunnelState: StateFlow<TunnelLinkState> = _tunnelState.asStateFlow()
+    @Volatile private var tunnelBridge: EmbeddedTunnelBridge? = null
     private val _tracks = MutableStateFlow<List<Track>>(emptyList())
     override val tracks: StateFlow<List<Track>> = _tracks.asStateFlow()
     private val playlistsFile = File(app.filesDir, "server-playlists.json")
@@ -125,23 +129,36 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
 
         // Downloads waiting for Wi-Fi (or for the server) carry on when the network changes.
         connectivity.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: android.net.Network) { kick.trySend(Unit); resumeDownloads() }
+            override fun onAvailable(network: android.net.Network) {
+                tunnelBridge?.reprobe()
+                refreshTunnelState()
+                kick.trySend(Unit)
+                resumeDownloads()
+            }
             override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) {
                 // Just joined Wi-Fi (airplane mode off, arriving home): reconnect on the first
                 // answer, not after the steadiness wait (that's for mobile-data dropouts).
                 // Through WireGuard the caps list the network underneath too.
                 val wifi = caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
                     caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+                if (wifi != onWifi) {
+                    tunnelBridge?.reprobe()
+                }
                 if (wifi && !onWifi) {
                     gate.newNetwork(SystemClock.elapsedRealtime())
                     // The tunnel may need a moment: ask now and again shortly.
                     scope.launch { delay(5_000); kick.trySend(Unit) }
                 }
                 onWifi = wifi
+                refreshTunnelState()
                 kick.trySend(Unit)
                 resumeDownloads()
             }
-            override fun onLost(network: android.net.Network) { onWifi = false; kick.trySend(Unit) }
+            override fun onLost(network: android.net.Network) {
+                onWifi = false
+                refreshTunnelState()
+                kick.trySend(Unit)
+            }
         })
     }
 
@@ -158,6 +175,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
             putString("password", s.password)
             putBoolean("mobileData", s.useMobileData)
             putBoolean("connectionSound", s.connectionSound)
+            if (s.tunnel != null) putString("tunnel", s.tunnel.toJson()) else remove("tunnel")
         }
         val old = _settings.value
         _settings.value = s
@@ -179,6 +197,7 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         if (!s.enabled) {
             // Hide the server's songs, except the ones kept on the phone; keep the saved
             // list for when it's turned back on.
+            stopTunnel()
             api = null
             _status.value = ServerStatus.Off
             updateWatch()
@@ -480,7 +499,41 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         }
     }
 
-    private fun apiFor(s: ServerSettings) = SubsonicApi(s.address, s.username, s.password)
+    @Synchronized
+    private fun stopTunnel() {
+        tunnelBridge?.close()
+        tunnelBridge = null
+        _tunnelState.value = TunnelLinkState.Off
+    }
+
+    private fun refreshTunnelState() {
+        _tunnelState.value = tunnelBridge?.state() ?: TunnelLinkState.Off
+    }
+
+    private fun urlPort(address: String): Int {
+        val u = runCatching { java.net.URI(address.trim()) }.getOrNull()
+        val p = u?.port ?: -1
+        return if (p > 0) p else if (address.trim().startsWith("https://")) 443 else 80
+    }
+
+    @Synchronized
+    private fun apiFor(s: ServerSettings): SubsonicApi {
+        val tun = s.tunnel
+        if (tun == null) {
+            stopTunnel()
+            return SubsonicApi(s.address, s.username, s.password)
+        }
+        val existing = tunnelBridge
+        val bridge = if (existing != null && existing.config == tun) {
+            existing
+        } else {
+            stopTunnel()
+            EmbeddedTunnelBridge.start(tun)?.also { tunnelBridge = it }
+        }
+        refreshTunnelState()
+        val base = bridge?.baseUrlFor(urlPort(s.address)) ?: s.address
+        return SubsonicApi(base, s.username, s.password)
+    }
 
     /** Keeps song IDs apart when the address or user changes. */
     private fun serverKey() = _settings.value.let { "${SubsonicApi.normalize(it.address)}|${it.username}" }

@@ -5,6 +5,55 @@ import com.jimboyo.localbeat.library.Track
 import com.jimboyo.localbeat.playlists.Playlist
 import kotlinx.coroutines.flow.StateFlow
 
+import org.json.JSONObject
+
+/** Embedded userspace WireGuard tunnel config (docs/onboarding.md). */
+data class EmbeddedTunnelConfig(
+    val privateKey: String,
+    val address: String,
+    val serverKey: String,
+    val presharedKey: String = "",
+    val endpointPublic: String? = null,
+    val endpointLan: String? = null,
+    val allowedIps: String = "10.8.0.1/32",
+) {
+    fun hasEndpoint(): Boolean = !endpointPublic.isNullOrBlank() || !endpointLan.isNullOrBlank()
+
+    fun toJson(): String = JSONObject().apply {
+        put("private_key", privateKey)
+        put("address", address)
+        put("server_key", serverKey)
+        put("preshared_key", presharedKey)
+        if (!endpointPublic.isNullOrBlank()) put("endpoint_public", endpointPublic)
+        if (!endpointLan.isNullOrBlank()) put("endpoint_lan", endpointLan)
+        put("allowed_ips", allowedIps)
+    }.toString()
+
+    override fun toString(): String =
+        "EmbeddedTunnelConfig(address=$address, endpointLan=$endpointLan, endpointPublic=$endpointPublic)"
+
+    companion object {
+        fun fromJson(text: String?): EmbeddedTunnelConfig? {
+            if (text.isNullOrBlank()) return null
+            return runCatching {
+                val j = JSONObject(text)
+                val cfg = EmbeddedTunnelConfig(
+                    privateKey = j.optString("private_key", ""),
+                    address = j.optString("address", ""),
+                    serverKey = j.optString("server_key", ""),
+                    presharedKey = j.optString("preshared_key", ""),
+                    endpointPublic = j.optString("endpoint_public", "").ifBlank { null },
+                    endpointLan = j.optString("endpoint_lan", "").ifBlank { null },
+                    allowedIps = j.optString("allowed_ips", "10.8.0.1/32"),
+                )
+                cfg.takeIf { it.privateKey.isNotBlank() && it.address.isNotBlank() && it.serverKey.isNotBlank() && it.hasEndpoint() }
+            }.getOrNull()
+        }
+    }
+}
+
+enum class TunnelLinkState { Off, Connecting, ConnectedLan, ConnectedPublic, Stalled }
+
 /** How to reach the music server (Settings → Music server). */
 data class ServerSettings(
     val enabled: Boolean = false,
@@ -16,9 +65,11 @@ data class ServerSettings(
     val useMobileData: Boolean = false,
     /** A short tone when the server connects or disconnects while music is playing. */
     val connectionSound: Boolean = true,
+    /** Embedded WireGuard tunnel config (null for direct/legacy connections). */
+    val tunnel: EmbeddedTunnelConfig? = null,
 ) {
     override fun toString(): String =
-        "ServerSettings(enabled=$enabled, address=$address, username=$username, password=***, useMobileData=$useMobileData, connectionSound=$connectionSound)"
+        "ServerSettings(enabled=$enabled, address=$address, username=$username, password=***, useMobileData=$useMobileData, connectionSound=$connectionSound, tunnel=${tunnel != null})"
 }
 
 /** Thrown when the player asks for a server song that isn't allowed right now (e.g. on mobile data). */
@@ -65,6 +116,7 @@ data class OfflineState(
 interface MusicServer {
     val settings: StateFlow<ServerSettings>
     val status: StateFlow<ServerStatus>
+    val tunnelState: StateFlow<TunnelLinkState>
     /** The server's catalogue as tracks; empty while off. Kept between launches. */
     val tracks: StateFlow<List<Track>>
     /**
