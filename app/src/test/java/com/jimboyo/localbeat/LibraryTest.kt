@@ -292,5 +292,19 @@ class LibraryTest {
         assertEquals(listOf("What's the Matter Here?"), tree.resolve(voiceReq("jangle pop"), rich).tracks.map { it.title })
         assertEquals(3, tree.resolve(voiceReq("80s music"), rich).tracks.size)
         assertEquals(listOf("Black Dog"), tree.resolve(voiceReq("seventies"), rich).tracks.map { it.title })
+
+        // BrowseTree genre tile subtitle is concise ("N albums") and search orders Playlists before Artists/Albums.
+        val rockItem = tree.item(com.jimboyo.localbeat.playback.BrowseTree.GENRE + rock.id, rich)!!
+        assertEquals("3 albums", rockItem.mediaMetadata.subtitle.toString())
+        val plRock = com.jimboyo.localbeat.playlists.Playlist("p2", "Rock Classics", listOf("GNR/Appetite/01.opus"))
+        val searchLib = Library(listOf(
+            track("Rockers/Rock Album/01.opus", "Rock Song", "Rockers", "Rock Album", 1985, "Rock"),
+        ))
+        val searchTree = com.jimboyo.localbeat.playback.BrowseTree(null, { listOf(plRock) })
+        val hits = searchTree.searchMediaIds("rock", searchLib)
+        val plIdx = hits.indexOfFirst { it.startsWith(com.jimboyo.localbeat.playback.BrowseTree.PLAYLIST) }
+        val artistIdx = hits.indexOfFirst { it.startsWith(com.jimboyo.localbeat.playback.BrowseTree.ARTIST) }
+        val albumIdx = hits.indexOfFirst { it.startsWith(com.jimboyo.localbeat.playback.BrowseTree.ALBUM) }
+        assert(plIdx in 0 until artistIdx && artistIdx < albumIdx) { "Expected playlist before artist before album, got $hits" }
     }
 }

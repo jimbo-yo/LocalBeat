@@ -60,6 +60,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -112,8 +113,10 @@ class Ui(
     var importPlaylist: () -> Unit = {},
     var sharePlaylist: (Playlist) -> Unit = {},
 ) {
+    /** Per-tab back stacks so switching bottom tabs preserves where you were. */
+    private val tabStacks: Map<Dest, SnapshotStateList<Screen>> = Dest.entries.associateWith { mutableStateListOf() }
     /** Pages opened on top of the current destination (album, artist, Now Playing…). */
-    val stack = mutableStateListOf<Screen>()
+    val stack: SnapshotStateList<Screen> get() = tabStacks.getValue(dest)
     var dest by mutableStateOf(Dest.EXPLORE)
     var libraryTab by mutableStateOf(LibraryTab.ALBUMS)
     /** Songs waiting for the "add to playlist" dialog. */
@@ -129,7 +132,7 @@ class Ui(
     var savedStates: SaveableStateHolder? = null
 
     /** The saved-state key of the page at [i] in [stack]. */
-    fun pageKey(i: Int) = "page$i:${stack[i]}"
+    fun pageKey(i: Int) = "page:$dest:$i:${stack[i]}"
 
     /** The saved-state key of the current main list. */
     fun listKey() = if (dest == Dest.LIBRARY) "list:$dest:$libraryTab" else "list:$dest"
@@ -153,16 +156,15 @@ class Ui(
         } else if (dest != Dest.EXPLORE) dest = Dest.EXPLORE
     }
 
-    /** Clears all stacked pages and their saved scroll states. */
+    /** Clears all stacked pages on the current tab and their saved scroll states. */
     fun clearStack() {
         stack.indices.forEach { savedStates?.removeState(pageKey(it)) }
         stack.clear()
     }
 
-    /** Bottom bar tap: that destination's main list (tapping it again also comes back to it). */
+    /** Bottom bar tap: switch to that tab (keeping its stack), or tap the active tab to pop to its root. */
     fun go(d: Dest) {
-        clearStack()
-        dest = d
+        if (d == dest) clearStack() else dest = d
     }
 
     fun toast(text: String) = Toast.makeText(app, text, Toast.LENGTH_SHORT).show()

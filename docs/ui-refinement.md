@@ -106,6 +106,25 @@ Search**.
    the order back when turned off; repeat cycles off → all → one. Player:
    `Player::rearrange` (reorder/remove without stopping the song heard) and
    `Repeat::{Off, All, One}`, with tests.
+5. **Browsing, navigation & layout polish (all three surfaces):**
+   *Status 2026-11-23:* built.
+   - **Studio navigation history & scroll state** (`gui/src/library_ui/nav.rs`):
+     unified LIBRARY Back/Forward history (`‹` / `›` fixed at top-left, mouse
+     Back/Forward buttons, `Alt+Left`/`Alt+Right`, `Esc`), using stable album
+     and artist keys that survive catalogue refreshes and preserving vertical
+     scroll offset per entry.
+   - **Studio Explore & grid polish** (`gui/src/library_ui/explore.rs`,
+     `library_ui.rs`): Genre and Decade cards on Explore gain representative
+     cover art thumbnails (matching the phone) in even full-width multi-column
+     grids; album grids reserve scrollbar gutter cleanly; truncated album
+     tiles, Explore cards, artist rows and song rows show full-text hover
+     tooltips.
+   - **Phone per-tab back stacks** (`LocalBeatUi.kt`): switching bottom tabs
+     preserves each tab's back stack and scroll state; tapping the active tab
+     pops to its root.
+   - **Android Auto** (`BrowseTree.kt`): shorter genre tile subtitles (`N
+     albums`) so grid tiles don't truncate, and Search order aligned with Phone
+     and Studio (Moods, Genres, Decades, Playlists, Artists, Albums, Songs).
 
 Studio's CLAUDE.md gets a pointer to `LocalBeat/GLOSSARY.md` and this file
 ("change in step") in step 2.

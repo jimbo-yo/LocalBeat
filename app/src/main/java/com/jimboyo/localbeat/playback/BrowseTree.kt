@@ -218,16 +218,30 @@ class BrowseTree(
     }
 
     /** Search from Android Auto's search screen. */
-    fun search(query: String, lib: Library): List<MediaItem> {
+    fun search(query: String, lib: Library): List<MediaItem> =
+        searchMediaIds(query, lib).mapNotNull { id ->
+            when {
+                id.startsWith(MOOD) -> lib.mood(id.removePrefix(MOOD))?.let { groupItem(MOOD, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+                id.startsWith(GENRE) -> lib.genre(id.removePrefix(GENRE))?.let { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) }
+                id.startsWith(DECADE) -> lib.decade(id.removePrefix(DECADE))?.let { groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS) }
+                id.startsWith(PLAYLIST) -> findPlaylist(id.removePrefix(PLAYLIST))?.let { playlistItem(it, lib) }
+                id.startsWith(ARTIST) -> lib.artist(id.removePrefix(ARTIST))?.let { artistItem(it) }
+                id.startsWith(ALBUM) -> lib.album(id.removePrefix(ALBUM))?.let { albumItem(it) }
+                else -> trackIdOf(id)?.let(lib::track)?.let { t -> trackItem(t, lib, inAlbumId(t, lib)) }
+            }
+        }
+
+    /** Ordered media IDs for Android Auto search (Moods, Genres, Decades, Playlists, Artists, Albums, Songs). */
+    internal fun searchMediaIds(query: String, lib: Library): List<String> {
         val q = searchKey(query)
         if (q.isEmpty()) return emptyList()
-        return ranked(lib.moods, q) { it.name }.take(SEARCH_LIMIT).map { groupItem(MOOD, it, MediaMetadata.MEDIA_TYPE_GENRE) } +
-            ranked(lib.genres, q) { it.name }.take(SEARCH_LIMIT).map { groupItem(GENRE, it, MediaMetadata.MEDIA_TYPE_GENRE) } +
-            ranked(lib.decades, q) { it.name }.take(SEARCH_LIMIT).map { groupItem(DECADE, it, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS) } +
-            ranked(lib.artists, q) { it.name }.take(SEARCH_LIMIT).map { artistItem(it) } +
-            ranked(lib.albums, q) { it.title }.take(SEARCH_LIMIT).map { albumItem(it) } +
-            ranked(playlists(), q) { it.name }.take(SEARCH_LIMIT).map { playlistItem(it, lib) } +
-            ranked(lib.tracks, q) { it.title }.take(SEARCH_LIMIT).map { t -> trackItem(t, lib, inAlbumId(t, lib)) }
+        return ranked(lib.moods, q) { it.name }.take(SEARCH_LIMIT).map { MOOD + it.id } +
+            ranked(lib.genres, q) { it.name }.take(SEARCH_LIMIT).map { GENRE + it.id } +
+            ranked(lib.decades, q) { it.name }.take(SEARCH_LIMIT).map { DECADE + it.id } +
+            ranked(playlists(), q) { it.name }.take(SEARCH_LIMIT).map { PLAYLIST + it.id } +
+            ranked(lib.artists, q) { it.name }.take(SEARCH_LIMIT).map { ARTIST + it.id } +
+            ranked(lib.albums, q) { it.title }.take(SEARCH_LIMIT).map { ALBUM + it.id } +
+            ranked(lib.tracks, q) { it.title }.take(SEARCH_LIMIT).map { TRACK + it.id }
     }
 
     // ---- turning requests into a queue ----
@@ -434,14 +448,10 @@ class BrowseTree(
         kind + g.id, g.name, plural(g.albums.size, "album"), type, g.albums.firstNotNullOfOrNull(::artUri), grid = true, group = group,
     )
 
-    private fun broadGenreItem(bg: BroadGenreGroup, group: String? = null): MediaItem {
-        val sub = if (bg.subgenres.isEmpty()) plural(bg.albums.size, "album")
-        else "${plural(bg.albums.size, "album")} · ${plural(bg.subgenres.size, "subgenre")}"
-        return browsable(
-            GENRE + bg.id, bg.name, sub, MediaMetadata.MEDIA_TYPE_GENRE,
-            bg.albums.firstNotNullOfOrNull(::artUri), grid = bg.subgenres.isEmpty(), group = group,
-        )
-    }
+    private fun broadGenreItem(bg: BroadGenreGroup, group: String? = null): MediaItem = browsable(
+        GENRE + bg.id, bg.name, plural(bg.albums.size, "album"), MediaMetadata.MEDIA_TYPE_GENRE,
+        bg.albums.firstNotNullOfOrNull(::artUri), grid = bg.subgenres.isEmpty(), group = group,
+    )
 
     private fun playlistItem(p: Playlist, lib: Library, group: String? = null): MediaItem {
         val tracks = p.tracks(lib)
