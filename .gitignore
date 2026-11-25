@@ -21,3 +21,7 @@ CLAUDE.local.md
 
 # Kotlin compiler caches
 .kotlin/
+
+# Rust JNI build artifacts (built by tunnel-jni/build-android.ps1)
+tunnel-jni/target/
+app/src/connected/jniLibs/
