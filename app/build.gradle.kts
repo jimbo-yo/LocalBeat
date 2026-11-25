@@ -60,7 +60,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Without the key (another computer), fall back to the debug key.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }

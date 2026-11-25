@@ -18,16 +18,20 @@ $bin = Join-Path $ndk 'toolchains\llvm\prebuilt\windows-x86_64\bin'
 $jniOut = Join-Path (Split-Path -Parent $PSScriptRoot) 'app\src\connected\jniLibs'
 
 $targets = @(
-    @{ Triple = 'aarch64-linux-android'; Abi = 'arm64-v8a'; Linker = 'aarch64-linux-android33-clang.cmd'; Env = 'CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER' },
-    @{ Triple = 'x86_64-linux-android';  Abi = 'x86_64';    Linker = 'x86_64-linux-android33-clang.cmd';  Env = 'CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER' }
+    @{ Triple = 'aarch64-linux-android'; Abi = 'arm64-v8a'; Linker = 'aarch64-linux-android33-clang.cmd'; Env = 'CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER'; CcEnv = 'CC_aarch64_linux_android'; ArEnv = 'AR_aarch64_linux_android' },
+    @{ Triple = 'x86_64-linux-android';  Abi = 'x86_64';    Linker = 'x86_64-linux-android33-clang.cmd';  Env = 'CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER';  CcEnv = 'CC_x86_64_linux_android';  ArEnv = 'AR_x86_64_linux_android' }
 )
 
 Push-Location $PSScriptRoot
 try {
+    $ar = Join-Path $bin 'llvm-ar.exe'
     foreach ($t in $targets) {
         Write-Host "Building $($t.Abi) ($($t.Triple))..."
-        Set-Item "env:$($t.Env)" (Join-Path $bin $t.Linker)
-        cargo build --release --target $t.Triple
+        $cc = Join-Path $bin $t.Linker
+        Set-Item "env:$($t.Env)" $cc
+        Set-Item "env:$($t.CcEnv)" $cc
+        Set-Item "env:$($t.ArEnv)" $ar
+        cargo build --release -j 2 --target $t.Triple
         if ($LASTEXITCODE -ne 0) { throw "cargo build failed for $($t.Triple)" }
         $destDir = Join-Path $jniOut $t.Abi
         New-Item -ItemType Directory -Force $destDir | Out-Null
