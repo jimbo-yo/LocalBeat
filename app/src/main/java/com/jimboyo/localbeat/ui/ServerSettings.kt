@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jimboyo.localbeat.server.ServerStatus
+import com.jimboyo.localbeat.server.TunnelLinkState
 
 /** Settings → Music server (Connected edition only). Off by default; on reveals the rest. */
 @Composable
@@ -31,20 +32,56 @@ fun ServerSection(ui: Ui) {
     val server = ui.app.server ?: return
     val settings by server.settings.collectAsStateWithLifecycle()
     val status by server.status.collectAsStateWithLifecycle()
+    val tunnelState by server.tunnelState.collectAsStateWithLifecycle()
     var address by remember(settings.address) { mutableStateOf(settings.address) }
     var username by remember(settings.username) { mutableStateOf(settings.username) }
     var password by remember(settings.password) { mutableStateOf(settings.password) }
+    var showInviteDialog by remember { mutableStateOf(false) }
 
     Section("Music server")
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Use music server", style = MaterialTheme.typography.bodyLarge)
             Text(
-                "Your own server (Navidrome or LocalBeat's), usually through WireGuard",
+                "Connect with a one-time invite link or your own OpenSubsonic server",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Switch(settings.enabled, { on -> server.update(settings.copy(enabled = on, address = address, username = username, password = password)) })
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(onClick = { showInviteDialog = true }) {
+            Text(if (settings.enabled && settings.username.isNotBlank()) "Join with a new invite…" else "Join with an invite…")
+        }
+    }
+    if (showInviteDialog) {
+        val existing = settings.takeIf { it.enabled && it.username.isNotBlank() }?.username
+        JoinInviteDialog(
+            server = server,
+            initialText = "",
+            alreadyConnectedAs = existing,
+            onDismiss = { showInviteDialog = false },
+            onClaimed = { device ->
+                showInviteDialog = false
+                ui.app.settings.markOnboardingDone()
+                ui.toast("Connected as $device")
+            },
+        )
+    }
+    if (settings.tunnel != null && settings.enabled) {
+        val tunnelLine = when (tunnelState) {
+            TunnelLinkState.ConnectedLan -> "Built-in tunnel: connected (home network)"
+            TunnelLinkState.ConnectedPublic -> "Built-in tunnel: connected (away from home)"
+            TunnelLinkState.Stalled -> "Can't reach the music server — if this device was removed, ask for a new invite."
+            TunnelLinkState.Connecting -> "Built-in tunnel: connecting…"
+            TunnelLinkState.Off -> "Built-in tunnel: ready"
+        }
+        Text(
+            tunnelLine,
+            Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (tunnelState == TunnelLinkState.Stalled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
     KeptOnPhone(ui)
     if (!settings.enabled) return

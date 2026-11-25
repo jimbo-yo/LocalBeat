@@ -37,6 +37,7 @@ import com.jimboyo.localbeat.ThemeMode
 import com.jimboyo.localbeat.playback.VoiceRequest
 import com.jimboyo.localbeat.playlists.Playlist
 import com.jimboyo.localbeat.server.ConnectLink
+import com.jimboyo.localbeat.server.InviteLink
 import com.jimboyo.localbeat.server.ServerSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,6 +51,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val ui = Ui(application as LocalBeatApp, player)
     /** A `localbeat://connect` link waiting for the user to confirm it. */
     var connectOffer by mutableStateOf<ConnectLink?>(null)
+    /** A `localbeat://join/...` invite link waiting to be claimed. */
+    var joinOffer by mutableStateOf<String?>(null)
 }
 
 class MainActivity : ComponentActivity() {
@@ -96,9 +99,44 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(style, style)
             }
             LocalBeatTheme(mode, colors, font) {
-                LocalBeatUi(ui, hasPermission, onGrant = ::askPermissions)
-                vm.connectOffer?.let { link ->
-                    ConnectDialog(link, app.server?.settings?.value, onUse = { useServer(link) }, onDismiss = { vm.connectOffer = null })
+                val onboardingDone by app.settings.onboardingDone.collectAsStateWithLifecycle()
+                val srv = app.server
+                val srvSettings = srv?.settings?.collectAsStateWithLifecycle()?.value
+                val showWelcome = srv != null && !onboardingDone && srvSettings?.enabled != true
+
+                if (showWelcome) {
+                    WelcomeScreen(
+                        server = srv!!,
+                        prefill = vm.joinOffer.orEmpty(),
+                        onDone = {
+                            vm.joinOffer = null
+                            app.settings.markOnboardingDone()
+                        },
+                        onLocalOnly = {
+                            vm.joinOffer = null
+                            app.settings.markOnboardingDone()
+                        },
+                    )
+                } else {
+                    LocalBeatUi(ui, hasPermission, onGrant = ::askPermissions)
+                    vm.connectOffer?.let { link ->
+                        ConnectDialog(link, srvSettings, onUse = { useServer(link) }, onDismiss = { vm.connectOffer = null })
+                    }
+                    val offer = vm.joinOffer
+                    if (offer != null && srv != null) {
+                        val existing = srvSettings?.takeIf { it.enabled && it.username.isNotBlank() }?.username
+                        JoinInviteDialog(
+                            server = srv,
+                            initialText = offer,
+                            alreadyConnectedAs = existing,
+                            onDismiss = { vm.joinOffer = null },
+                            onClaimed = { device ->
+                                vm.joinOffer = null
+                                app.settings.markOnboardingDone()
+                                ui.toast("Connected as $device")
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -127,7 +165,12 @@ class MainActivity : ComponentActivity() {
         val data = intent?.data
         if (intent?.action == Intent.ACTION_VIEW && data?.scheme.equals("localbeat", ignoreCase = true)) {
             if (app.server == null) return // the offline edition: no server
-            val link = ConnectLink.parse(data.toString())
+            val raw = data.toString()
+            if (InviteLink.extract(raw) != null) {
+                vm.joinOffer = raw
+                return
+            }
+            val link = ConnectLink.parse(raw)
             if (link == null) ui.toast("That isn't a valid LocalBeat server link") else vm.connectOffer = link
             return
         }

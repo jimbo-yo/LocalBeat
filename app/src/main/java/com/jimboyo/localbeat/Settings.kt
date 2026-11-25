@@ -28,9 +28,14 @@ class Settings(context: Context) {
     private val _font = MutableStateFlow(enumOr(prefs.getString("font", null), AppFont.FIGTREE))
     val font: StateFlow<AppFont> = _font.asStateFlow()
 
+    /** Whether the first-run onboarding Welcome screen has been completed or skipped. */
+    private val _onboardingDone = MutableStateFlow(prefs.getBoolean("onboardingDone", false))
+    val onboardingDone: StateFlow<Boolean> = _onboardingDone.asStateFlow()
+
     fun setTheme(t: ThemeMode) { _theme.value = t; prefs.edit { putString("theme", t.name) } }
     fun setColors(c: ColorStyle) { _colors.value = c; prefs.edit { putString("colors", c.name) } }
     fun setFont(f: AppFont) { _font.value = f; prefs.edit { putString("font", f.name) } }
+    fun markOnboardingDone() { _onboardingDone.value = true; prefs.edit { putBoolean("onboardingDone", true) } }
 
     private inline fun <reified E : Enum<E>> enumOr(name: String?, default: E): E =
         enumValues<E>().firstOrNull { it.name == name } ?: default

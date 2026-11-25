@@ -170,6 +170,8 @@ interface MusicServer {
 
     /** Saves the settings and (re)connects, or turns the server off. */
     fun update(settings: ServerSettings)
+    /** Claims a `localbeat://join/...` invite and connects immediately; returns the assigned device name. */
+    suspend fun claimInvite(inviteText: String): Result<String>
     /** Fetches the catalogue again. */
     fun refresh()
 

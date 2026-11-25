@@ -220,6 +220,13 @@ class SubsonicServer(private val app: LocalBeatApp) : MusicServer {
         }
     }
 
+    override suspend fun claimInvite(inviteText: String): Result<String> =
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            InviteClaimer.claim(inviteText, _settings.value) { newSettings ->
+                update(newSettings)
+            }.map { it.deviceName }
+        }
+
     /** The song list (and playlists) saved after the last successful fetch, if from this server and user. */
     private fun loadSavedCatalogue() {
         savedCatalogue()?.let { if (api != null) _tracks.value = it }
