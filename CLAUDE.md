@@ -223,6 +223,26 @@ decisions, 2026-11-17):
   use internet-reachable MCP servers, which clashes with the WireGuard-only
   plan): decide after the laptop version works
 
+## TV app (decided 2026-11-26, not built yet)
+
+Why and how: **`docs/adr/0001-tv-app-on-vega.md`**. A separate repo,
+`~/Development/LocalBeatTV` (Vega OS: React Native + TypeScript, for the Fire
+TV Stick 4K Select), package `com.jimboyo.localbeat.tv`, shown as "LocalBeat".
+
+- Home LAN only, no WireGuard; joins the music server by code + Approve as a
+  device of one user (name suggested by the TV, editable on Approve). Talks to
+  nothing but the music server at a private address
+- Streams original files (no `format=opus`); everything shown, CD rips marked;
+  DRM `.m4p` skipped. Nothing stored but the saved queue and position
+- Screen: Player strip at the top, left rail with the four entry points,
+  Now Playing full screen with the Queue beside it, 4-5 column album grid,
+  D-pad focus; Now Playing doubles as a slow-drifting idle screen
+- Grouping rules ported from `library/Library.kt`: keep both in step, checked
+  by shared test cases
+- Not in v1: voice, EQ, control from phone/`localbeat player`, playlist
+  editing. Step 2: visualisation (Vega audio tap, else Studio-made analysis
+  files)
+
 ## The LocalBeat mark (shared by the suite)
 
 A gold disc (#F2B33D) with a navy (#1B2A3A) eighth note, on navy: the phone
