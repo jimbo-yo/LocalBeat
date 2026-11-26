@@ -1,7 +1,8 @@
 # LocalBeat
 
-The LocalBeat suite plays the user's own CD rips and older copies on three
-surfaces: the phone app, Android Auto, and LocalBeat Studio on the desktop.
+The LocalBeat suite plays the user's own CD rips and older copies on four
+surfaces: the phone app, Android Auto, the TV app, and LocalBeat Studio on
+the desktop.
 They share one map of the library and one vocabulary.
 
 ## The library
@@ -78,6 +79,10 @@ _Avoid_: Kept, downloaded
 **Kept**:
 A music-server album the phone has downloaded so it plays without the server; the phone can remove it.
 _Avoid_: Synced, pinned, offline
+
+**TV app**:
+LocalBeat on a television, streaming from the music server over the home network and keeping nothing on the device.
+_Avoid_: Firestick app, Fire TV app
 
 **On this phone**:
 Music that plays without the music server: synced albums, kept albums and loose files.
