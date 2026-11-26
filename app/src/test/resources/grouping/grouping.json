@@ -1,0 +1,421 @@
+{
+  "tracks": [
+    "t20",
+    "t16",
+    "t17",
+    "t18",
+    "t06",
+    "t02",
+    "t01",
+    "t05",
+    "t07",
+    "t08",
+    "t09",
+    "t19",
+    "t03",
+    "t21",
+    "t04",
+    "t10",
+    "t12",
+    "t11",
+    "t13",
+    "t15",
+    "t14"
+  ],
+  "albums": [
+    {
+      "id": "aabeab84d50b7ccd9",
+      "title": "Appetite for Destruction",
+      "artist": "Guns N' Roses",
+      "artistId": "rc305da04d6b57fad",
+      "year": 1987,
+      "decade": 1980,
+      "discCount": 1,
+      "cdRip": false,
+      "genres": [
+        "hard rock"
+      ],
+      "moods": [],
+      "tracks": [
+        "t04"
+      ]
+    },
+    {
+      "id": "a8188c02bd918005f",
+      "title": "The Beatles",
+      "artist": "The Beatles",
+      "artistId": "r2232af6f93a0b9dc",
+      "year": 1968,
+      "decade": 1960,
+      "discCount": 2,
+      "cdRip": true,
+      "genres": [
+        "Rock",
+        "Psychedelic rock"
+      ],
+      "moods": [],
+      "tracks": [
+        "t16",
+        "t18",
+        "t17"
+      ]
+    },
+    {
+      "id": "a0333a2a464c731cb",
+      "title": "Disraeli Gears",
+      "artist": "Cream",
+      "artistId": "r7bdd161c94587ab4",
+      "year": 1967,
+      "decade": 1960,
+      "discCount": 1,
+      "cdRip": false,
+      "genres": [
+        "psychedelic rock"
+      ],
+      "moods": [
+        "mellow"
+      ],
+      "tracks": [
+        "t19"
+      ]
+    },
+    {
+      "id": "add493f1363941659",
+      "title": "Greatest Hits",
+      "artist": "Band X",
+      "artistId": "r1c86ac8614660b28",
+      "year": 1995,
+      "decade": 1990,
+      "discCount": 1,
+      "cdRip": false,
+      "genres": [
+        "Pop"
+      ],
+      "moods": [],
+      "tracks": [
+        "t10",
+        "t11",
+        "t12"
+      ]
+    },
+    {
+      "id": "ad10bdd133468a639",
+      "title": "Greatest Hits",
+      "artist": "Band Y",
+      "artistId": "ra648ce53057dfccc",
+      "year": 2001,
+      "decade": 2000,
+      "discCount": 1,
+      "cdRip": false,
+      "genres": [
+        "Pop"
+      ],
+      "moods": [],
+      "tracks": [
+        "t13",
+        "t14",
+        "t15"
+      ]
+    },
+    {
+      "id": "aaa4d70e572fb315a",
+      "title": "Murmur",
+      "artist": "R.E.M.",
+      "artistId": "r258383176b156675",
+      "year": 1983,
+      "decade": 1980,
+      "discCount": 1,
+      "cdRip": true,
+      "genres": [
+        "Rock",
+        "Jangle pop",
+        "College rock"
+      ],
+      "moods": [
+        "Driving",
+        "Mellow"
+      ],
+      "tracks": [
+        "t01",
+        "t02",
+        "t03"
+      ]
+    },
+    {
+      "id": "adb38b09336a098f9",
+      "title": "Now That's Music",
+      "artist": "Various Artists",
+      "artistId": "r51cce90b6cdfe291",
+      "year": 1986,
+      "decade": 1980,
+      "discCount": 1,
+      "cdRip": false,
+      "genres": [
+        "Pop"
+      ],
+      "moods": [],
+      "tracks": [
+        "t07",
+        "t08",
+        "t09"
+      ]
+    },
+    {
+      "id": "a1c9302c85c82365a",
+      "title": "Use Your Illusion I",
+      "artist": "Guns N’ Roses",
+      "artistId": "rc305da04d6b57fad",
+      "year": 1991,
+      "decade": 1990,
+      "discCount": 1,
+      "cdRip": true,
+      "genres": [
+        "Hard Rock"
+      ],
+      "moods": [],
+      "tracks": [
+        "t05",
+        "t06"
+      ]
+    }
+  ],
+  "artists": [
+    {
+      "id": "r1c86ac8614660b28",
+      "name": "Band X",
+      "albums": [
+        "add493f1363941659"
+      ],
+      "looseTracks": []
+    },
+    {
+      "id": "ra648ce53057dfccc",
+      "name": "Band Y",
+      "albums": [
+        "ad10bdd133468a639"
+      ],
+      "looseTracks": []
+    },
+    {
+      "id": "r2232af6f93a0b9dc",
+      "name": "The Beatles",
+      "albums": [
+        "a8188c02bd918005f"
+      ],
+      "looseTracks": []
+    },
+    {
+      "id": "r7bdd161c94587ab4",
+      "name": "Cream",
+      "albums": [
+        "a0333a2a464c731cb"
+      ],
+      "looseTracks": []
+    },
+    {
+      "id": "rc305da04d6b57fad",
+      "name": "Guns N' Roses",
+      "albums": [
+        "aabeab84d50b7ccd9",
+        "a1c9302c85c82365a"
+      ],
+      "looseTracks": []
+    },
+    {
+      "id": "r258383176b156675",
+      "name": "R.E.M.",
+      "albums": [
+        "aaa4d70e572fb315a"
+      ],
+      "looseTracks": []
+    },
+    {
+      "id": "rca29f2909574a7f9",
+      "name": "Someone",
+      "albums": [],
+      "looseTracks": [
+        "t20"
+      ]
+    },
+    {
+      "id": "r3641ffe8a220d6d2",
+      "name": "Unknown artist",
+      "albums": [],
+      "looseTracks": [
+        "t21"
+      ]
+    },
+    {
+      "id": "r51cce90b6cdfe291",
+      "name": "Various Artists",
+      "albums": [
+        "adb38b09336a098f9"
+      ],
+      "looseTracks": []
+    }
+  ],
+  "genres": [
+    {
+      "id": "ga76ec7e78bad7775",
+      "name": "College rock",
+      "albums": [
+        "aaa4d70e572fb315a"
+      ]
+    },
+    {
+      "id": "g1dad8d9defbb7a92",
+      "name": "Hard Rock",
+      "albums": [
+        "aabeab84d50b7ccd9",
+        "a1c9302c85c82365a"
+      ]
+    },
+    {
+      "id": "g0b3be4eceff68b18",
+      "name": "Jangle pop",
+      "albums": [
+        "aaa4d70e572fb315a"
+      ]
+    },
+    {
+      "id": "g4f197c99a78b8411",
+      "name": "Pop",
+      "albums": [
+        "add493f1363941659",
+        "ad10bdd133468a639",
+        "adb38b09336a098f9"
+      ]
+    },
+    {
+      "id": "gdb58b3a088d7439d",
+      "name": "Psychedelic rock",
+      "albums": [
+        "a8188c02bd918005f",
+        "a0333a2a464c731cb"
+      ]
+    },
+    {
+      "id": "g38464bf083d958b5",
+      "name": "Rock",
+      "albums": [
+        "a8188c02bd918005f",
+        "aaa4d70e572fb315a"
+      ]
+    }
+  ],
+  "broadGenres": [
+    {
+      "id": "g1dad8d9defbb7a92",
+      "name": "Hard Rock",
+      "albums": [
+        "aabeab84d50b7ccd9",
+        "a1c9302c85c82365a"
+      ],
+      "subgenres": []
+    },
+    {
+      "id": "g4f197c99a78b8411",
+      "name": "Pop",
+      "albums": [
+        "add493f1363941659",
+        "ad10bdd133468a639",
+        "adb38b09336a098f9"
+      ],
+      "subgenres": []
+    },
+    {
+      "id": "g38464bf083d958b5",
+      "name": "Rock",
+      "albums": [
+        "a8188c02bd918005f",
+        "a0333a2a464c731cb",
+        "aaa4d70e572fb315a"
+      ],
+      "subgenres": [
+        {
+          "id": "gdb58b3a088d7439d",
+          "name": "Psychedelic rock",
+          "albums": [
+            "a8188c02bd918005f",
+            "a0333a2a464c731cb"
+          ]
+        },
+        {
+          "id": "ga76ec7e78bad7775",
+          "name": "College rock",
+          "albums": [
+            "aaa4d70e572fb315a"
+          ]
+        },
+        {
+          "id": "g0b3be4eceff68b18",
+          "name": "Jangle pop",
+          "albums": [
+            "aaa4d70e572fb315a"
+          ]
+        }
+      ]
+    }
+  ],
+  "moods": [
+    {
+      "id": "m38494b4ad0b977a9",
+      "name": "Driving",
+      "albums": [
+        "aaa4d70e572fb315a"
+      ]
+    },
+    {
+      "id": "m0d5f965bc3a3ed97",
+      "name": "Mellow",
+      "albums": [
+        "a0333a2a464c731cb",
+        "aaa4d70e572fb315a"
+      ]
+    }
+  ],
+  "decades": [
+    {
+      "id": "d1960",
+      "name": "1960s",
+      "albums": [
+        "a0333a2a464c731cb",
+        "a8188c02bd918005f"
+      ]
+    },
+    {
+      "id": "d1980",
+      "name": "1980s",
+      "albums": [
+        "aaa4d70e572fb315a",
+        "adb38b09336a098f9",
+        "aabeab84d50b7ccd9"
+      ]
+    },
+    {
+      "id": "d1990",
+      "name": "1990s",
+      "albums": [
+        "a1c9302c85c82365a",
+        "add493f1363941659"
+      ]
+    },
+    {
+      "id": "d2000",
+      "name": "2000s",
+      "albums": [
+        "ad10bdd133468a639"
+      ]
+    }
+  ],
+  "recentlyAdded": [
+    "a8188c02bd918005f",
+    "a1c9302c85c82365a",
+    "aaa4d70e572fb315a",
+    "aabeab84d50b7ccd9",
+    "ad10bdd133468a639",
+    "add493f1363941659",
+    "adb38b09336a098f9",
+    "a0333a2a464c731cb"
+  ]
+}
