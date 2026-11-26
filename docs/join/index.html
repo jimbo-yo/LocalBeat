@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LocalBeat — Download &amp; Connect</title>
+  <link rel="icon" type="image/svg+xml" href="../brand/localbeat.svg">
+  <link rel="stylesheet" href="../assets/join.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="brand">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" aria-hidden="true">
+        <rect x="4" y="4" width="100" height="100" rx="24" ry="24" fill="#1B2A3A"/>
+        <path fill="#F2B33D" fill-rule="evenodd" d="M54,28a26,26 0,1 1,0 52a26,26 0,1 1,0 -52z M54,49a5,5 0,1 0,0 10a5,5 0,1 0,0 -10z"/>
+        <path fill="#1B2A3A" d="M58,36h10v6h-6v22a7,7 0,1 1,-4 -6.3z"/>
+      </svg>
+      <div>
+        <h1>LocalBeat</h1>
+        <p id="brand-subtitle">Personal music player &amp; library</p>
+      </div>
+    </header>
+
+    <div id="status-banner" class="banner hidden" role="status"></div>
+
+    <section class="card" aria-labelledby="step1-title">
+      <div class="step-header">
+        <span id="step1-num" class="step-num hidden">1</span>
+        <h2 id="step1-title">Download LocalBeat</h2>
+      </div>
+      <p id="step1-lead" class="lead">Listen to your personal music library on Android, Windows, or Linux.</p>
+
+      <div id="primary-download">
+        <a id="primary-dl-btn" class="btn btn-primary" href="https://github.com/jimbo-yo/LocalBeat/releases/latest">Download LocalBeat</a>
+        <p id="primary-dl-meta" class="meta">Loading latest release…</p>
+        <div id="primary-dl-tip" class="tip hidden"></div>
+      </div>
+
+      <details id="other-platforms" class="other-platforms">
+        <summary>Other platforms</summary>
+        <div id="other-platform-list" class="platform-list"></div>
+      </details>
+    </section>
+
+    <section id="enroll-card" class="card hidden" aria-labelledby="step2-title">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <h2 id="step2-title">Connect to your music server</h2>
+      </div>
+      <p class="lead">Once LocalBeat is installed, come back to this page and tap below to connect automatically.</p>
+      <div class="btn-stack">
+        <a id="open-app-btn" class="btn btn-primary" href="#">Open in LocalBeat</a>
+        <button id="copy-invite-btn" class="btn btn-secondary" type="button">Copy invite link instead</button>
+      </div>
+      <p class="meta">Single-use invite · your connection details never leave this browser.</p>
+    </section>
+
+    <footer class="footer">
+      <a href="https://github.com/jimbo-yo/LocalBeat/releases">Android releases</a>
+      &middot;
+      <a href="https://github.com/jimbo-yo/LocalBeatStudio/releases">Desktop releases</a>
+    </footer>
+  </main>
+  <script src="../assets/join.js"></script>
+</body>
+</html>

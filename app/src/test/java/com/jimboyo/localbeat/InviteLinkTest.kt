@@ -23,6 +23,13 @@ class InviteLinkTest {
         assertEquals("192.168.1.10:51820", parsed.endpointLan)
         assertEquals("vpn.example.com:51820", parsed.endpointPublic)
         assertEquals("10.8.250.2/32", parsed.bootstrapTunnel().address)
+
+        val payload = uri.removePrefix(InviteLink.PREFIX)
+        val webUrl = "https://jimbo-yo.github.io/LocalBeat/join#$payload"
+        val webSms = "See https://example.com or tap ($webUrl)!"
+        assertEquals(webUrl, InviteLink.extract(webSms))
+        assertEquals("tok123", InviteLink.parse(webSms).getOrThrow().token)
+        assertEquals("tok123", InviteLink.parse(webUrl.replace("/join#", "/JOIN/#")).getOrThrow().token)
     }
 
     @Test

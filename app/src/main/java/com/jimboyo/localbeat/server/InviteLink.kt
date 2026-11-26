@@ -37,14 +37,19 @@ data class InviteLink(
         const val CLAIM_PORT = 8444
 
         private val URI_REGEX = Regex("localbeat://join/([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE)
+        private val WEB_URI_REGEX = Regex("https?://[^\\s)\\]>\"',;]+/join/?#([A-Za-z0-9_-]+)", RegexOption.IGNORE_CASE)
 
-        /** Extracts the first `localbeat://join/<payload>` URI from arbitrary pasted text (e.g. an SMS). */
-        fun extract(text: String): String? = URI_REGEX.find(text)?.value
+        /**
+         * Extracts the first invite link (`localbeat://join/<payload>` or
+         * `https://.../join#<payload>`) from arbitrary pasted text (e.g. an SMS).
+         */
+        fun extract(text: String): String? =
+            URI_REGEX.find(text)?.value ?: WEB_URI_REGEX.find(text)?.value
 
         /** Extracts, decodes, and validates an invite for a phone. */
         fun parse(input: String): Result<InviteLink> = runCatching {
-            val match = URI_REGEX.find(input)
-                ?: throw IllegalArgumentException("No LocalBeat invite found (expected a localbeat://join/... link)")
+            val match = URI_REGEX.find(input) ?: WEB_URI_REGEX.find(input)
+                ?: throw IllegalArgumentException("No LocalBeat invite found (expected an invite link)")
             val payload = match.groupValues[1]
             val jsonBytes = Base64.getUrlDecoder().decode(payload)
             val j = JSONObject(String(jsonBytes, Charsets.UTF_8))

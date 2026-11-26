@@ -101,7 +101,7 @@ fun WelcomeScreen(
                     minLines = 2,
                     maxLines = 4,
                     label = { Text("Invite link") },
-                    placeholder = { Text("localbeat://join/… (or paste the whole message)") },
+                    placeholder = { Text("Paste your invite link (or the whole message)") },
                 )
                 Spacer(Modifier.height(8.dp))
                 when {
