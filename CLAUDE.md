@@ -238,7 +238,8 @@ TV Stick 4K Select), package `com.jimboyo.localbeat.tv`, shown as "LocalBeat".
   Now Playing full screen with the Queue beside it, 4-5 column album grid,
   D-pad focus; Now Playing doubles as a slow-drifting idle screen
 - Grouping rules ported from `library/Library.kt`: keep both in step, checked
-  by shared test cases
+  by shared test cases (`GroupingCasesTest.kt` reads
+  `app/src/test/resources/grouping/`, copies of LocalBeatTV `shared-tests/`)
 - Not in v1: voice, EQ, control from phone/`localbeat player`, playlist
   editing. Step 2: visualisation (Vega audio tap, else Studio-made analysis
   files)

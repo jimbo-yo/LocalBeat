@@ -1,0 +1,32 @@
+{
+  "about": "Shared grouping cases: the same songs must give the same albums, artists, genres, moods and decades in the phone app (Kotlin, GroupingCasesTest) and the TV app (TypeScript, test/grouping.test.ts). Fields left out default to empty / 0 (discNumber and discTotal to 1). Regenerate grouping.json with `npm run shared-tests` only after checking the change by eye.",
+  "tracks": [
+    { "id": "t01", "path": "server:R.E.M./Murmur/01. R.E.M. - Radio Free Europe.flac", "title": "Radio Free Europe", "artist": "R.E.M.", "albumArtist": "R.E.M.", "album": "Murmur", "trackNumber": 1, "year": 1983, "genre": "Rock; Jangle pop; College rock", "mood": "Driving", "musicBrainzAlbumId": "AAAA-1111", "cdRip": true, "dateAdded": 1000 },
+    { "id": "t02", "path": "server:R.E.M./Murmur/02. R.E.M. - Pilgrimage.flac", "title": "Pilgrimage", "artist": "R.E.M.", "albumArtist": "R.E.M.", "album": "Murmur", "trackNumber": 2, "year": 1983, "genre": "Rock; Jangle pop; College rock", "mood": "Mellow; Driving", "musicBrainzAlbumId": "aaaa-1111", "cdRip": true, "dateAdded": 1000 },
+    { "id": "t03", "path": "server:R.E.M./Murmur/13. R.E.M. - There She Goes Again.flac", "title": "There She Goes Again", "artist": "R.E.M.", "albumArtist": "R.E.M.", "album": "Murmur", "trackNumber": 13, "year": 1983, "genre": "Rock", "cdRip": true, "dateAdded": 1001 },
+
+    { "id": "t04", "path": "server:Guns N' Roses/Appetite for Destruction/01. Welcome to the Jungle.mp3", "title": "Welcome to the Jungle", "artist": "Guns N' Roses", "albumArtist": "Guns N' Roses", "album": "Appetite for Destruction", "trackNumber": 1, "year": 1987, "genre": "hard rock", "dateAdded": 500 },
+    { "id": "t05", "path": "server:Guns N’ Roses/Use Your Illusion I/01. Right Next Door to Hell.flac", "title": "Right Next Door to Hell", "artist": "Guns N’ Roses", "albumArtist": "Guns N’ Roses", "album": "Use Your Illusion I", "trackNumber": 1, "year": 1991, "genre": "Hard Rock", "cdRip": true, "dateAdded": 2000 },
+    { "id": "t06", "path": "server:Guns N’ Roses/Use Your Illusion I/02. Dust N' Bones.flac", "title": "Dust N’ Bones", "artist": "Guns N’ Roses", "albumArtist": "guns n’  roses", "album": "Use Your Illusion I", "trackNumber": 2, "year": 1991, "genre": "Hard Rock", "cdRip": true, "dateAdded": 2000 },
+
+    { "id": "t07", "path": "server:Compilations/Now That's Music/01. A.mp3", "title": "Song A", "artist": "Artist One", "album": "Now That's Music", "trackNumber": 1, "year": 1985, "genre": "Pop", "dateAdded": 300 },
+    { "id": "t08", "path": "server:Compilations/Now That's Music/02. B.mp3", "title": "Song B", "artist": "Artist Two", "album": "Now That's Music", "trackNumber": 2, "year": 1985, "genre": "Pop", "dateAdded": 300 },
+    { "id": "t09", "path": "server:Compilations/Now That's Music/03. C.mp3", "title": "Song C", "artist": "Artist Three", "album": "Now That's Music", "trackNumber": 3, "year": 1986, "genre": "Pop", "dateAdded": 300 },
+
+    { "id": "t10", "path": "server:Compilations/Greatest Hits/01. X1.m4a", "title": "X One", "artist": "Band X", "album": "Greatest Hits", "trackNumber": 1, "year": 1995, "genre": "Pop", "dateAdded": 400 },
+    { "id": "t11", "path": "server:Compilations/Greatest Hits/02. X2.m4a", "title": "X Two", "artist": "Band X", "album": "Greatest Hits", "trackNumber": 2, "year": 1995, "genre": "Pop", "dateAdded": 400 },
+    { "id": "t12", "path": "server:Compilations/Greatest Hits/03. X3.m4a", "title": "X Three", "artist": "Band X", "album": "Greatest Hits", "trackNumber": 3, "year": 1995, "genre": "Pop", "dateAdded": 400 },
+    { "id": "t13", "path": "server:Compilations/Greatest Hits/01. Y1.m4a", "title": "Y One", "artist": "Band Y", "album": "Greatest Hits", "trackNumber": 1, "year": 2001, "genre": "Pop", "dateAdded": 410 },
+    { "id": "t14", "path": "server:Compilations/Greatest Hits/02. Y2.m4a", "title": "Y Two", "artist": "Band Y", "album": "Greatest Hits", "trackNumber": 2, "year": 2001, "genre": "Pop", "dateAdded": 410 },
+    { "id": "t15", "path": "server:Compilations/Greatest Hits/03. Y3.m4a", "title": "Y Three", "artist": "Band Y", "album": "Greatest Hits", "trackNumber": 3, "year": 2001, "genre": "Pop", "dateAdded": 410 },
+
+    { "id": "t16", "path": "server:The Beatles/The White Album/1.01. Back in the U.S.S.R..flac", "title": "Back in the U.S.S.R.", "artist": "The Beatles", "albumArtist": "The Beatles", "album": "The Beatles", "trackNumber": 1, "discNumber": 1, "discTotal": 2, "year": 1968, "genre": "Rock; Psychedelic rock", "musicBrainzAlbumId": "bbbb-2222", "cdRip": true, "dateAdded": 3000 },
+    { "id": "t17", "path": "server:The Beatles/The White Album/2.01. Birthday.flac", "title": "Birthday", "artist": "The Beatles", "albumArtist": "The Beatles", "album": "The Beatles", "trackNumber": 1, "discNumber": 2, "discTotal": 2, "year": 1968, "genre": "Rock; Psychedelic rock", "musicBrainzAlbumId": "bbbb-2222", "cdRip": true, "dateAdded": 3000 },
+    { "id": "t18", "path": "server:The Beatles/The White Album/1.02. Dear Prudence.flac", "title": "Dear Prudence", "artist": "The Beatles", "albumArtist": "The Beatles", "album": "The Beatles", "trackNumber": 2, "discNumber": 1, "discTotal": 2, "year": 1968, "genre": "Rock; Psychedelic rock", "musicBrainzAlbumId": "bbbb-2222", "cdRip": true, "dateAdded": 3000 },
+
+    { "id": "t19", "path": "server:Cream/Disraeli Gears/01. Strange Brew.mp3", "title": "Strange Brew", "artist": "Cream", "albumArtist": "Cream", "album": "Disraeli Gears", "trackNumber": 1, "year": 1967, "genre": "psychedelic rock", "mood": "mellow", "dateAdded": 100 },
+
+    { "id": "t20", "path": "server:Loose/Someone - A Single.mp3", "title": "A Single", "artist": "Someone", "album": "", "dateAdded": 50 },
+    { "id": "t21", "path": "server:Loose/Untitled.mp3", "title": "\"Untitled\"", "artist": "", "album": "", "dateAdded": 60 }
+  ]
+}
