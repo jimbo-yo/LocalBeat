@@ -1,0 +1,7 @@
+# Line endings: LF in the repo and in every checkout, Windows included, so
+# files copied from a Windows checkout to Linux (the Mac server, WSL, the
+# Surface) work as they are. Windows-only scripts keep CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
