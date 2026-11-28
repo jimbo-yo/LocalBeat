@@ -117,6 +117,13 @@ aapt2 dump permissions <apk>   # the offline APK must never list INTERNET
   `~/backup/localbeat/`, since 2026-11-13). **Back it up**: updates
   need the same key; without it the build falls back to the debug key. Bump
   `versionCode` for every APK handed out
+- **Windows checkouts have CRLF line endings** (git `core.autocrlf=true`;
+  the committed files are LF). Scripts or text files copied from one to WSL, the Mac server or another Linux machine break. Copy from git instead (`git show
+  HEAD:path`, after committing) or from a WSL/Linux clone, and check before
+  running: `grep -lc $'\r' FILES` must list nothing. On 2026-11-28 a server
+  install staged from the Windows checkout failed with `env: 'bash\r': No
+  such file or directory` (LocalBeatServer CLAUDE.md, "Copying from a
+  Windows checkout").
 - Code map: `tags/` (Ogg/Vorbis reader), `library/` (scan, cache, grouping),
   `art/` (cover cache + content provider for Auto), `audio/` (10-band EQ as
   an ExoPlayer AudioProcessor, so it applies on every output; boosts lower the
